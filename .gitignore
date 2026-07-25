@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.astro/
+
+# Local secrets. Never commit.
+.dev.vars
+.env
+.env.*
+!.env.example
+
+# Wrangler
+.wrangler/
+
+# Generated Cloudflare binding types
+worker-configuration.d.ts
+
+# OS / editor
+.DS_Store
+Thumbs.db

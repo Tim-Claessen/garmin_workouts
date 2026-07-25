@@ -1,0 +1,19 @@
+---
+export const prerender = false;
+
+const email = Astro.locals.accessEmail;
+---
+
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Garmin workout builder</title>
+  </head>
+  <body>
+    <h1>Garmin workout builder</h1>
+    <p>Scaffold only. Paste input and the review screen come in phases 3 and 4.</p>
+    {email && <p>Signed in as {email}</p>}
+  </body>
+</html>

@@ -1,0 +1,17 @@
+# Copy to .dev.vars for local development. Never commit .dev.vars.
+#
+# Workers uses .dev.vars rather than .env — with platformProxy enabled, this is
+# what `astro dev` and `wrangler dev` read to populate the same bindings the
+# deployed Worker gets. In production these are set as encrypted secrets on the
+# Worker, not from any file.
+#
+# There is deliberately no ANTHROPIC_API_KEY: parsing runs on Workers AI via the
+# `AI` binding, so no model provider key is stored anywhere.
+
+# Application Audience (AUD) tag for the run.timclaessen.com Access application.
+# Zero Trust > Access controls > Applications > (the app) > Overview.
+ACCESS_AUD=0000000000000000000000000000000000000000000000000000000000000000
+
+# Intervals.icu. Athlete IDs include the leading "i".
+ICU_ATHLETE_ID=i000000
+ICU_API_KEY=replace-with-a-rotated-key

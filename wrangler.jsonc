@@ -1,0 +1,41 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "garmin-workouts",
+  // Adapter v14 replaced the old "./dist/_worker.js/index.js" path with this
+  // unified entrypoint. The old path breaks the build, because the Cloudflare
+  // Vite plugin resolves `main` before the build has produced it.
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2026-07-25",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+
+  // The only way in is run.timclaessen.com, which sits behind Cloudflare Access.
+  // Both of these must stay false — flipping either one re-opens a public route
+  // to this Worker that Access does not protect. A dashboard toggle alone is not
+  // enough: wrangler re-enables workers.dev on deploy unless it is false here.
+  "workers_dev": false,
+  "preview_urls": false,
+
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS"
+  },
+
+  "ai": {
+    "binding": "AI"
+  },
+
+  "observability": {
+    "enabled": true
+  },
+
+  // Anything not listed here is REMOVED from the Worker on deploy. Encrypted
+  // secrets are unaffected — ACCESS_AUD and ICU_API_KEY are set with
+  // `wrangler secret put` and deliberately absent from this file.
+  "vars": {
+    // The JWKS endpoint is public and the team domain appears in every Access
+    // redirect, so neither is sensitive.
+    "ACCESS_TEAM_DOMAIN": "royal-water-86b6.cloudflareaccess.com",
+    // An account identifier, not a credential — useless without ICU_API_KEY.
+    "ICU_ATHLETE_ID": "i652699"
+  }
+}
