@@ -30,7 +30,18 @@ export interface ClearResult {
   matched: number;
   deleted: number;
   failed: number;
+  /** Matched but never attempted, because the per-run cap was reached. */
+  remaining: number;
 }
+
+/**
+ * Intervals.icu has no bulk delete, so clearing N workouts costs N subrequests
+ * plus the listing. A Worker invocation has a hard subrequest ceiling, and a
+ * calendar with a season of sessions on it can exceed it — at which point the
+ * run dies part-way with no record of how far it got. Capping means a large
+ * clear finishes across a few presses instead, with an accurate count each time.
+ */
+export const MAX_DELETES_PER_RUN = 200;
 
 /**
  * Credentials are passed in rather than read from the binding, so this module
@@ -46,13 +57,45 @@ function authHeader(apiKey: string): string {
   return `Basic ${btoa(`API_KEY:${apiKey}`)}`;
 }
 
-/** Today in the athlete's local terms. Dates are compared as plain YYYY-MM-DD. */
+/**
+ * Today as a plain YYYY-MM-DD date, by the Worker's clock.
+ *
+ * That clock is always UTC, so this is *not* the athlete's date. In Australia the
+ * two disagree for the first ten hours of every local day, and in that window a
+ * session planned for this morning still sorts as "future" against UTC's
+ * yesterday — putting a run the athlete has already done inside the "upcoming"
+ * sweep. Callers that can learn the athlete's date should pass it through
+ * `resolveToday` rather than relying on this.
+ */
 export function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function windowFor(scope: ClearScope): { oldest: string; newest: string } {
-  const now = today();
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const ONE_DAY_MS = 86_400_000;
+
+/**
+ * The athlete's own date, when the browser offers a believable one.
+ *
+ * The client does not get to name the deletion window outright: this is
+ * irreversible, and a wrong "today" silently changes which workouts count as
+ * upcoming. A supplied date is honoured only when it is well-formed and within
+ * one day of UTC — the exact span real timezone offsets cover, and nothing
+ * beyond it. Anything else falls back to the Worker's own date.
+ */
+export function resolveToday(supplied: unknown, utc: string = today()): string {
+  if (typeof supplied !== 'string' || !DATE_PATTERN.test(supplied)) return utc;
+
+  const skew = Math.abs(
+    Date.parse(`${supplied}T00:00:00Z`) - Date.parse(`${utc}T00:00:00Z`),
+  );
+  return Number.isFinite(skew) && skew <= ONE_DAY_MS ? supplied : utc;
+}
+
+export function windowFor(
+  scope: ClearScope,
+  now: string = today(),
+): { oldest: string; newest: string } {
   if (scope === 'future') return { oldest: now, newest: WIDE_FUTURE };
   if (scope === 'past') return { oldest: WIDE_PAST, newest: now };
   return { oldest: WIDE_PAST, newest: WIDE_FUTURE };
@@ -78,8 +121,9 @@ export function inScope(
 export async function listWorkouts(
   creds: Credentials,
   scope: ClearScope,
+  now: string = today(),
 ): Promise<CalendarEvent[]> {
-  const { oldest, newest } = windowFor(scope);
+  const { oldest, newest } = windowFor(scope, now);
   const response = await fetch(
     `https://intervals.icu/api/v1/athlete/${creds.athleteId}/events?oldest=${oldest}&newest=${newest}`,
     { headers: { authorization: authHeader(creds.apiKey) } },
@@ -88,18 +132,23 @@ export async function listWorkouts(
   if (!response.ok) throw new Error(`list_failed_${response.status}`);
 
   const events = (await response.json()) as CalendarEvent[];
-  return events.filter((event) => inScope(event, scope));
+  return events.filter((event) => inScope(event, scope, now));
 }
 
 export async function clearWorkouts(
   creds: Credentials,
   scope: ClearScope,
+  now: string = today(),
 ): Promise<ClearResult> {
-  const targets = await listWorkouts(creds, scope);
+  const targets = await listWorkouts(creds, scope, now);
+  // Oldest first, so a capped run always clears a prefix of the calendar rather
+  // than an arbitrary slice, and pressing again picks up exactly where it left off.
+  const batch = targets.slice(0, MAX_DELETES_PER_RUN);
+
   let deleted = 0;
   let failed = 0;
 
-  for (const event of targets) {
+  for (const event of batch) {
     const response = await fetch(
       `https://intervals.icu/api/v1/athlete/${creds.athleteId}/events/${event.id}`,
       { method: 'DELETE', headers: { authorization: authHeader(creds.apiKey) } },
@@ -109,5 +158,11 @@ export async function clearWorkouts(
     else failed += 1;
   }
 
-  return { scope, matched: targets.length, deleted, failed };
+  return {
+    scope,
+    matched: targets.length,
+    deleted,
+    failed,
+    remaining: targets.length - batch.length,
+  };
 }

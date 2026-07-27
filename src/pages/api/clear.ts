@@ -1,6 +1,11 @@
 import type { APIRoute } from 'astro';
 import { resolveAthlete } from '../../lib/roster';
-import { clearWorkouts, listWorkouts, type ClearScope } from '../../lib/intervals-admin';
+import {
+  clearWorkouts,
+  listWorkouts,
+  resolveToday,
+  type ClearScope,
+} from '../../lib/intervals-admin';
 
 export const prerender = false;
 
@@ -25,8 +30,12 @@ export const GET: APIRoute = async ({ url }) => {
   const resolved = resolveAthlete(url.searchParams.get('athlete'));
   if (!resolved.ok) return json({ error: resolved.error }, resolved.status);
 
+  // The Worker's clock is UTC. "Upcoming" has to mean upcoming where the athlete
+  // is, or a session already run this morning gets counted as still to come.
+  const now = resolveToday(url.searchParams.get('today'));
+
   try {
-    const events = await listWorkouts(resolved.athlete, scope);
+    const events = await listWorkouts(resolved.athlete, scope, now);
     // The label goes back with the count so the confirmation can name whose
     // calendar is about to be emptied.
     return json({ scope, count: events.length, athlete: resolved.athlete.label });
@@ -36,7 +45,12 @@ export const GET: APIRoute = async ({ url }) => {
 };
 
 export const POST: APIRoute = async ({ request }) => {
-  let body: { scope?: unknown; confirm?: unknown; athlete?: unknown };
+  let body: {
+    scope?: unknown;
+    confirm?: unknown;
+    athlete?: unknown;
+    today?: unknown;
+  };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -58,7 +72,7 @@ export const POST: APIRoute = async ({ request }) => {
   if (!resolved.ok) return json({ error: resolved.error }, resolved.status);
 
   try {
-    const result = await clearWorkouts(resolved.athlete, scope);
+    const result = await clearWorkouts(resolved.athlete, scope, resolveToday(body.today));
     return json({ ...result, athlete: resolved.athlete.label });
   } catch {
     return json({ error: 'Could not reach Intervals.icu. Nothing was deleted.' }, 502);

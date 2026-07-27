@@ -4,9 +4,9 @@ import cloudflare from '@astrojs/cloudflare';
 
 export default defineConfig({
   output: 'server',
-  adapter: cloudflare({
-    // Gives `astro dev` the real Workers bindings (AI, vars, secrets) from
-    // wrangler.jsonc and .dev.vars, so local behaviour matches deployed.
-    platformProxy: { enabled: true },
-  }),
+  // Adapter v14 dropped the `platformProxy` option — `astro dev` now runs the
+  // app inside workerd through the Cloudflare Vite plugin, so bindings from
+  // wrangler.jsonc and .dev.vars are always real. Passing the old option did
+  // nothing but suggest it was doing something.
+  adapter: cloudflare(),
 });

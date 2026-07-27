@@ -1,5 +1,14 @@
 {
+  // The Worker half: Astro pages, API routes, lib and tests. Worker runtime
+  // types are global here, which is right for everything that runs in workerd
+  // and wrong for anything that runs in a browser — see tsconfig.client.json for
+  // why the two cannot share a config, and `npm run typecheck` for how both get
+  // checked.
   "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    // The test suite runs under Node: node:fs, node:path, process, import.meta.dirname.
+    "types": ["node"]
+  },
   "include": [".astro/types.d.ts", "**/*"],
-  "exclude": ["dist"]
+  "exclude": ["dist", "src/client"]
 }

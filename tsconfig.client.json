@@ -1,0 +1,30 @@
+{
+  // The browser half of the app, typechecked on its own.
+  //
+  // It has to be separate because worker-configuration.d.ts declares a global
+  // `interface Element` — HTMLRewriter's, not the DOM's. Global interfaces of the
+  // same name merge, and a member declared directly on the merged interface
+  // shadows the one it would otherwise inherit. So workerd's `append(content:
+  // string | ReadableStream | Response)` hides ParentNode's `append(...nodes)`,
+  // and its `remove(): Element` hides ChildNode's `remove(): void` — which is
+  // what makes every `node.append(child)` in review.ts an error and
+  // `<T extends HTMLElement>` an unsatisfiable constraint.
+  //
+  // There is no ordering or lib setting that resolves that: the two type worlds
+  // simply cannot both be global. Excluding the generated file here gives the
+  // client plain DOM types, and tsconfig.json keeps the Worker types for
+  // everything that actually runs in the Worker.
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  // Only the entry point is listed. What it imports is pulled in by resolution,
+  // which keeps this honest about the split CLAUDE.md describes: the modules the
+  // browser reaches (schema, validate, to-intervals, to-plain-english) are
+  // exactly the ones with no binding in them. Naming src/lib wholesale would
+  // drag ai.ts and roster.ts in here and break on `cloudflare:workers`, which is
+  // the boundary working as intended.
+  "include": ["src/client/**/*"],
+  "exclude": ["dist", "worker-configuration.d.ts"]
+}

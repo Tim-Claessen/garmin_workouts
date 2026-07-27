@@ -111,7 +111,7 @@ const email = Astro.locals.accessEmail;
             </span>
           </div>
 
-          <div id="clear-body" class="hidden">
+          <div id="clear-body" class="clear__body hidden">
             <p class="notice">
               Removes planned workouts from the Intervals.icu calendar. Recorded
               runs are never touched, and neither is anything this app did not
@@ -181,6 +181,14 @@ const email = Astro.locals.accessEmail;
             <span>Ends</span>
           </div>
           <ul id="stack"></ul>
+          {/*
+            A step added here is one the athlete typed, so it arrives confirmed.
+            `inferred` means the model supplied something the text did not, and
+            that is not what happened.
+          */}
+          <div class="steps__foot">
+            <button id="add-step" class="link" type="button">+ Add step</button>
+          </div>
         </div>
 
         <div class="actionbar">
@@ -268,9 +276,36 @@ const email = Astro.locals.accessEmail;
               <select id="sheet-unit"></select>
             </div>
           </div>
+
+          {/*
+            The one free-text field besides the workout name. It is safe to be
+            one because sanitiseCueInput() runs on every keystroke, so a digit
+            never survives long enough to be stored — and a number in a cue is
+            the m/mtr unit trap arriving by another route.
+          */}
+          <div class="field">
+            <label class="label" for="sheet-cue">Cue on the watch</label>
+            <input
+              id="sheet-cue"
+              type="text"
+              maxlength="24"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="threshold"
+            />
+            <p class="notice">
+              Optional, and in your own words — this is what shows mid-run.
+              Numbers are removed as you type.
+            </p>
+          </div>
         </div>
 
         <div class="sheet__foot">
+          {/* Hidden when this is the only step left: the schema has no workout
+              with nothing in it, and neither does a session. */}
+          <button id="sheet-remove" class="link link--danger" type="button">
+            Remove step
+          </button>
           <button id="sheet-cancel" class="btn btn--quiet" type="button">Cancel</button>
           <button id="sheet-save" class="btn" type="button">Save</button>
         </div>

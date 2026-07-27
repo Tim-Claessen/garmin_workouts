@@ -46,15 +46,29 @@ export function formatTime(seconds: number): string {
  * read as a duration by the Intervals.icu parser, which is the 26-hour failure
  * all over again. A cue is worth having, but never at that price.
  */
-export function sanitiseCue(note: string | undefined): string {
-  if (!note) return '';
-  return note
+export const CUE_MAX_LENGTH = 24;
+
+/**
+ * The cue rules applied to a half-typed value.
+ *
+ * Identical to `sanitiseCue` except that a trailing space survives, because
+ * trimming one on every keystroke makes a second word impossible to type. The
+ * review screen runs this on input, so the field can only ever hold text that is
+ * already legal — a digit disappears as it is typed rather than being quietly
+ * removed later, and what is on screen is what reaches the watch.
+ */
+export function sanitiseCueInput(value: string): string {
+  return value
     .replace(/[0-9]/g, ' ')
     .replace(/[^a-zA-Z\s'-]/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 24)
-    .trim();
+    .replace(/^\s+/, '')
+    .slice(0, CUE_MAX_LENGTH);
+}
+
+export function sanitiseCue(note: string | undefined): string {
+  if (!note) return '';
+  return sanitiseCueInput(note).trim();
 }
 
 export function formatStep(step: Step): string {

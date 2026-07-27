@@ -69,18 +69,12 @@ export const workoutSchema = z.object({
 });
 export type Workout = z.infer<typeof workoutSchema>;
 
-/** Every step in a workout, flattened, with repeat blocks expanded once. */
-export function allSteps(workout: Workout): Step[] {
-  return workout.blocks.flatMap((block) =>
-    block.kind === 'step' ? [block] : block.steps,
-  );
-}
-
-/** True when any value in the workout still needs human acknowledgement. */
-export function hasUnacknowledgedInference(workout: Workout): boolean {
-  return workout.blocks.some((block) =>
-    block.kind === 'step'
-      ? block.source === 'inferred'
-      : block.source === 'inferred' || block.steps.some((s) => s.source === 'inferred'),
-  );
-}
+/*
+ * `allSteps` and `hasUnacknowledgedInference` used to live here and were called
+ * from nowhere. The second was the dangerous one: it read like the server-side
+ * guard that stops an unconfirmed workout being sent, so anyone reading this file
+ * would take that guard as implemented. It is not, and cannot be — `source` says
+ * where a value came from, not whether a human has agreed to it, and
+ * acknowledgement is client state that never crosses the wire. The review screen
+ * counts outstanding confirmations itself and is the only thing that gates Send.
+ */

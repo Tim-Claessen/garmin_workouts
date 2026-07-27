@@ -206,6 +206,17 @@ h2 {
   color: var(--text);
 }
 
+/* Removal is a real loss of work, so it reads as one rather than as a tidy-up. */
+.link--danger {
+  color: var(--danger);
+  text-decoration-color: var(--danger-edge);
+}
+
+.link--danger:hover {
+  color: var(--danger);
+  filter: brightness(1.15);
+}
+
 /* ---- Paste view ---------------------------------------------------------- */
 
 .card--paste {
@@ -471,6 +482,17 @@ h2 {
   padding-left: var(--space-5);
 }
 
+/* Adding a step: quiet, at the foot of whatever it appends to, and indented to
+   the same depth so it is obvious which list it joins. */
+.steps__foot {
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.repeat__add {
+  padding: var(--space-1) var(--space-3) var(--space-2) var(--space-5);
+}
+
 @media (max-width: 959px) {
   .repeat__inner .step {
     margin-left: var(--space-3);
@@ -634,6 +656,7 @@ h2 {
 
 .sheet__foot {
   display: flex;
+  align-items: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   border-top: 1px solid var(--line);
@@ -641,6 +664,12 @@ h2 {
 
 .sheet__foot .btn {
   flex: 1;
+}
+
+/* Pushed away from Save so the destructive control is not next to the one the
+   thumb is heading for. */
+#sheet-remove {
+  margin-right: auto;
 }
 
 .field {
@@ -699,7 +728,13 @@ h2 {
   gap: var(--space-2);
 }
 
-#clear-body {
+/*
+ * Selected by class, not by #clear-body. An id selector outranks .hidden however
+ * late .hidden is declared, so `display: flex` here beat the toggle and the panel
+ * sat permanently open — every delete control on screen from first paint, on the
+ * one screen where that is least welcome.
+ */
+.clear__body {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);

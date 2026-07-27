@@ -7,16 +7,24 @@
 // from wrangler.jsonc — which means the generated Env does not know about them.
 // Declared here by interface merging. Optional, because a deploy can be missing
 // them and the code has to cope rather than assume.
-interface Env {
-  /** Application Audience (AUD) tag for the run.timclaessen.com Access app. */
-  ACCESS_AUD?: string;
-  /**
-   * JSON array of athletes: [{ id, label, athleteId, apiKey }].
-   * The roster the app can send to. See docs/adding-an-athlete.md.
-   */
-  ICU_ATHLETES?: string;
-  /** Legacy single-athlete key, still honoured when ICU_ATHLETES is absent. */
-  ICU_API_KEY?: string;
+//
+// This must merge into `Cloudflare.Env`, not the global `Env`. wrangler types
+// generates both, but `import { env } from 'cloudflare:workers'` is typed as
+// `Cloudflare.Env` alone — augmenting the global one leaves every secret read in
+// access.ts and roster.ts as a type error, invisible while `npm run typecheck`
+// is broken and a compile failure the moment it is fixed.
+declare namespace Cloudflare {
+  interface Env {
+    /** Application Audience (AUD) tag for the run.timclaessen.com Access app. */
+    ACCESS_AUD?: string;
+    /**
+     * JSON array of athletes: [{ id, label, athleteId, apiKey }].
+     * The roster the app can send to. See docs/adding-an-athlete.md.
+     */
+    ICU_ATHLETES?: string;
+    /** Legacy single-athlete key, still honoured when ICU_ATHLETES is absent. */
+    ICU_API_KEY?: string;
+  }
 }
 
 declare namespace App {

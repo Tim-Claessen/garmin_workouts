@@ -88,7 +88,10 @@ describe('selectAthlete', () => {
 
 describe('toPublic', () => {
   it('never exposes credentials', () => {
-    const published = toPublic(ZOE) as Record<string, unknown>;
+    // Through `unknown`: PublicAthlete has no index signature, so TypeScript is
+    // right that the two do not overlap. The cast is only here to inspect the
+    // object's keys at runtime, which is the whole point of the test.
+    const published = toPublic(ZOE) as unknown as Record<string, unknown>;
     expect(Object.keys(published).sort()).toEqual(['id', 'label']);
     expect(JSON.stringify(published)).not.toContain('zoe-key');
     expect(JSON.stringify(published)).not.toContain('i123456');

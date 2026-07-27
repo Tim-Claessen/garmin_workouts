@@ -1,6 +1,7 @@
 import type { Block, Step, Workout } from '../lib/schema';
-import { toDescription } from '../lib/to-intervals';
+import { sanitiseCueInput, toDescription } from '../lib/to-intervals';
 import { toPlainEnglish } from '../lib/to-plain-english';
+import { MAX_REPS, validateWorkout, type ValidationError } from '../lib/validate';
 
 /**
  * The review screen.
@@ -18,16 +19,16 @@ import { toPlainEnglish } from '../lib/to-plain-english';
  * rather than a request to scroll.
  */
 
-interface ValidationError {
-  code: string;
-  blockIndex: number | null;
-  stepIndex: number | null;
-  message: string;
-}
-
 interface ParseResponse {
   workout: Workout;
-  validationErrors: ValidationError[];
+  /**
+   * Sent by /api/parse, and deliberately not used. The client mutates the
+   * workout — amounts, types, cues, whole steps — so a list computed before any
+   * of that is stale the moment the first edit lands. render() re-runs the same
+   * validateWorkout() the server ran, which is the only version that can be
+   * trusted to describe what is on screen.
+   */
+  validationErrors?: ValidationError[];
 }
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -61,30 +62,39 @@ let validationErrors: ValidationError[] = [];
  * disabled and reading "Sending…".
  */
 let sending = false;
-/** Keys of inferred steps the user has confirmed. */
-const acknowledged = new Set<string>();
+/**
+ * A send failure, held until the next attempt. Validation blockers are derived
+ * from the workout on every render and so are never stored — but "could not
+ * reach the server" is not a fact about the workout, and editing a step is no
+ * reason to forget it.
+ */
+let sendFailure: string | null = null;
+/**
+ * The inferred steps the user has confirmed, held by object identity.
+ *
+ * This used to be a set of "blockIndex.stepIndex" strings, which was correct
+ * only while the shape of the workout was fixed. Now that steps can be added and
+ * removed, positions shift underneath those keys: delete step 2 and step 3's
+ * confirmation silently transfers to whatever slid into its place, marking an
+ * unreviewed guess as reviewed. Identity survives every edit — a step object is
+ * mutated in place, never replaced — so it is the thing worth keying on.
+ */
+let acknowledged = new WeakSet<Step>();
 
-function stepKey(blockIndex: number, stepIndex: number | null): string {
-  return stepIndex === null ? `${blockIndex}` : `${blockIndex}.${stepIndex}`;
-}
-
-function isUnacknowledged(step: Step, key: string): boolean {
-  return step.source === 'inferred' && !acknowledged.has(key);
+function isUnacknowledged(step: Step): boolean {
+  return step.source === 'inferred' && !acknowledged.has(step);
 }
 
 function outstandingCount(): number {
   if (!workout) return 0;
-  let count = 0;
-  workout.blocks.forEach((block, blockIndex) => {
-    if (block.kind === 'step') {
-      if (isUnacknowledged(block, stepKey(blockIndex, null))) count += 1;
-      return;
-    }
-    block.steps.forEach((step, stepIndex) => {
-      if (isUnacknowledged(step, stepKey(blockIndex, stepIndex))) count += 1;
-    });
-  });
-  return count;
+  return workout.blocks.reduce(
+    (count, block) =>
+      count +
+      (block.kind === 'step'
+        ? Number(isUnacknowledged(block))
+        : block.steps.filter((step) => isUnacknowledged(step)).length),
+    0,
+  );
 }
 
 /* ---- Derived figures ------------------------------------------------------ */
@@ -193,6 +203,58 @@ function errorsFor(blockIndex: number, stepIndex: number | null): ValidationErro
   );
 }
 
+/* ---- Adding and removing steps -------------------------------------------- */
+
+/**
+ * Rows in the table, without expanding repeats — the number of steps that can be
+ * individually removed, as opposed to `totalSteps`, which counts what the athlete
+ * will actually run.
+ */
+function stepEntries(w: Workout): number {
+  return w.blocks.reduce(
+    (total, block) => total + (block.kind === 'step' ? 1 : block.steps.length),
+    0,
+  );
+}
+
+/**
+ * A new step is `parsed`, not `inferred`.
+ *
+ * `inferred` means the model supplied something the source text did not, and the
+ * review screen makes the athlete confirm it. A step someone added by hand has
+ * already had the only review that means anything, and asking them to confirm
+ * their own typing is how confirmation becomes a reflex.
+ *
+ * One kilometre is a placeholder that clears the 50 m validation floor. The sheet
+ * opens on it straight away, so nobody has to accept it.
+ */
+function newStep(): Step {
+  return {
+    kind: 'step',
+    type: 'run',
+    duration: { kind: 'distance', metres: 1000 },
+    untilLapPress: false,
+    source: 'parsed',
+  };
+}
+
+function removeStep(blockIndex: number, stepIndex: number | null): void {
+  if (!workout) return;
+
+  if (stepIndex === null) {
+    workout.blocks.splice(blockIndex, 1);
+    return;
+  }
+
+  const block = workout.blocks[blockIndex];
+  if (!block || block.kind !== 'repeat') return;
+
+  block.steps.splice(stepIndex, 1);
+  // A repeat with nothing in it is neither allowed by the schema nor meant by
+  // anyone, so emptying one removes the set itself.
+  if (block.steps.length === 0) workout.blocks.splice(blockIndex, 1);
+}
+
 /* ---- The editing sheet ---------------------------------------------------- */
 
 /*
@@ -204,14 +266,30 @@ function errorsFor(blockIndex: number, stepIndex: number | null): ValidationErro
 
 interface SheetState {
   step: Step;
-  key: string;
+  /** Where the step sits, so it can be removed as well as edited. */
+  blockIndex: number;
+  stepIndex: number | null;
   number: number;
   type: Step['type'];
   untilLapPress: boolean;
   value: number;
   unit: string;
-  /** The Edit button that opened the sheet, so focus can be handed back. */
-  opener: HTMLElement | null;
+  cue: string;
+  /**
+   * Added by the Add button and not yet saved. Cancel discards it, so pressing
+   * Add and changing your mind leaves the workout as it was rather than stranding
+   * a placeholder step nobody asked for.
+   */
+  isNew: boolean;
+  /**
+   * How to find whatever opened the sheet, so focus can be handed back.
+   *
+   * A selector and not the node itself: the opener lives inside the step table,
+   * and every edit re-renders that table. Holding the element would hold a
+   * detached one, and focusing a detached node drops focus to the body instead
+   * of failing visibly.
+   */
+  openerSelector: string | null;
 }
 
 let sheet: SheetState | null = null;
@@ -221,43 +299,89 @@ function paintSheet(): void {
   el<HTMLSelectElement>('sheet-type').value = sheet.type;
   el<HTMLInputElement>('sheet-value').value = String(sheet.value);
   el<HTMLSelectElement>('sheet-unit').value = sheet.unit;
+  el<HTMLInputElement>('sheet-cue').value = sheet.cue;
 
   el('sheet-ends-set').setAttribute('aria-pressed', String(!sheet.untilLapPress));
   el('sheet-ends-lap').setAttribute('aria-pressed', String(sheet.untilLapPress));
   // A lap-press step still carries a placeholder duration, but it is not a
   // number anyone should be asked to choose.
   el('sheet-amount').classList.toggle('hidden', sheet.untilLapPress);
+
+  // Removing the last step would leave a workout with nothing in it, which the
+  // schema does not describe and no one means. Cancel is the way out instead.
+  const removable = !sheet.isNew && workout !== null && stepEntries(workout) > 1;
+  el('sheet-remove').classList.toggle('hidden', !removable);
 }
 
-function openSheet(step: Step, key: string, number: number, opener: HTMLElement): void {
+function openSheet(
+  step: Step,
+  blockIndex: number,
+  stepIndex: number | null,
+  number: number,
+  openerSelector: string | null,
+  isNew = false,
+): void {
   const { value, unit } = editableValue(step);
   sheet = {
     step,
-    key,
+    blockIndex,
+    stepIndex,
     number,
     type: step.type,
     untilLapPress: step.untilLapPress,
     value,
     unit,
-    opener,
+    cue: step.note ?? '',
+    isNew,
+    openerSelector,
   };
 
-  el('sheet-title').textContent = `Step ${number} — ${STEP_LABEL[step.type].toLowerCase()}`;
+  el('sheet-title').textContent = isNew
+    ? 'Add a step'
+    : `Step ${number} — ${STEP_LABEL[step.type].toLowerCase()}`;
+  el<HTMLButtonElement>('sheet-save').textContent = isNew ? 'Add it' : 'Save';
   paintSheet();
   el('sheet').classList.remove('hidden');
   el<HTMLSelectElement>('sheet-type').focus();
 }
 
-function closeSheet(): void {
-  const opener = sheet?.opener ?? null;
+/** Hides the sheet and hands back the selector for whatever opened it. */
+function closeSheet(): string | null {
+  const selector = sheet?.openerSelector ?? null;
   sheet = null;
   el('sheet').classList.add('hidden');
-  opener?.focus();
+  return selector;
+}
+
+/**
+ * Puts focus back where it came from — always after the re-render, never before,
+ * because the opener is rebuilt by the very edit that closed the sheet.
+ */
+function restoreFocus(selector: string | null): void {
+  const target = selector ? document.querySelector<HTMLElement>(selector) : null;
+  // The opener may be gone for good: its step was removed, or renumbering moved
+  // it. Add step sits at the foot of the table whatever happened, so focus lands
+  // somewhere real rather than on the body.
+  (target ?? el<HTMLButtonElement>('add-step')).focus();
+}
+
+/** Cancel, Escape, Close and the scrim all mean the same thing: discard the edit. */
+function cancelSheet(): void {
+  const discard = sheet?.isNew
+    ? { blockIndex: sheet.blockIndex, stepIndex: sheet.stepIndex }
+    : null;
+  const selector = closeSheet();
+
+  if (discard) {
+    removeStep(discard.blockIndex, discard.stepIndex);
+    render();
+  }
+  restoreFocus(selector);
 }
 
 function saveSheet(): void {
   if (!sheet) return;
-  const { step, key } = sheet;
+  const { step, isNew } = sheet;
 
   step.type = sheet.type;
 
@@ -273,12 +397,68 @@ function saveSheet(): void {
     applyValue(step, Number(el<HTMLInputElement>('sheet-value').value), sheet.unit);
   }
 
+  // Already sanitised on every keystroke; trimmed here because a trailing space
+  // is allowed while typing and meaningless once committed.
+  const cue = sanitiseCueInput(el<HTMLInputElement>('sheet-cue').value).trim();
+  if (cue) step.note = cue;
+  else delete step.note;
+
+  const selector = closeSheet();
+
+  // Changing a value is as much an act of review as agreeing with it. A step
+  // added by hand arrives `parsed` and so has nothing outstanding to confirm.
+  if (isNew) render();
+  else acknowledge(step);
+
+  restoreFocus(selector);
+}
+
+function removeFromSheet(): void {
+  if (!sheet) return;
+  const { blockIndex, stepIndex } = sheet;
   closeSheet();
-  // Changing a value is as much an act of review as agreeing with it.
-  acknowledge(key);
+  removeStep(blockIndex, stepIndex);
+  render();
+  // Deliberately not the opener: that button belonged to the step just removed,
+  // and the row at its position now is a different step entirely.
+  restoreFocus(null);
+}
+
+/** Appends a step and opens the sheet on it, so it is never left as a placeholder. */
+function addStep(blockIndex: number | null, openerSelector: string): void {
+  if (!workout) return;
+  const step = newStep();
+
+  if (blockIndex === null) {
+    workout.blocks.push(step);
+    render();
+    openSheet(step, workout.blocks.length - 1, null, totalSteps(workout), openerSelector, true);
+    return;
+  }
+
+  const block = workout.blocks[blockIndex];
+  if (!block || block.kind !== 'repeat') return;
+
+  block.steps.push(step);
+  render();
+  openSheet(step, blockIndex, block.steps.length - 1, block.steps.length, openerSelector, true);
 }
 
 /* ---- Rendering the step table --------------------------------------------- */
+
+/** Identifies a row in the DOM, so focus can be returned to it after a re-render. */
+function stepKey(blockIndex: number, stepIndex: number | null): string {
+  return stepIndex === null ? `${blockIndex}` : `${blockIndex}.${stepIndex}`;
+}
+
+/**
+ * Whichever control the row is showing: Edit once confirmed, "Change it" while
+ * the guess still stands. Only one of the two is ever in the DOM, and which one
+ * it is can flip during the edit that closes the sheet — so focus asks for both.
+ */
+function rowFocusSelector(key: string): string {
+  return `.step[data-key="${key}"] .step__edit, .step[data-key="${key}"] .step__change`;
+}
 
 function renderStep(
   step: Step,
@@ -288,7 +468,7 @@ function renderStep(
   total: number,
 ): HTMLElement {
   const key = stepKey(blockIndex, stepIndex);
-  const unacknowledged = isUnacknowledged(step, key);
+  const unacknowledged = isUnacknowledged(step);
   const stepErrors = errorsFor(blockIndex, stepIndex);
 
   const item = document.createElement('li');
@@ -359,7 +539,9 @@ function renderStep(
     edit.className = 'step__edit';
     edit.textContent = 'Edit';
     edit.setAttribute('aria-label', `Edit step ${number}`);
-    edit.addEventListener('click', () => openSheet(step, key, number, edit));
+    edit.addEventListener('click', () =>
+      openSheet(step, blockIndex, stepIndex, number, rowFocusSelector(key)),
+    );
     ends.append(edit);
   }
   item.append(ends);
@@ -386,15 +568,17 @@ function renderStep(
     ack.className = 'confirm';
     ack.textContent = "That's right";
     ack.setAttribute('aria-label', `That's right — confirm step ${number}`);
-    ack.addEventListener('click', () => acknowledge(key));
+    ack.addEventListener('click', () => acknowledge(step));
     guess.append(ack);
 
     const change = document.createElement('button');
     change.type = 'button';
-    change.className = 'btn btn--quiet';
+    change.className = 'btn btn--quiet step__change';
     change.textContent = 'Change it';
     change.setAttribute('aria-label', `Change step ${number}`);
-    change.addEventListener('click', () => openSheet(step, key, number, change));
+    change.addEventListener('click', () =>
+      openSheet(step, blockIndex, stepIndex, number, rowFocusSelector(key)),
+    );
     guess.append(change);
 
     item.append(guess);
@@ -403,8 +587,8 @@ function renderStep(
   return item;
 }
 
-function acknowledge(key: string): void {
-  acknowledged.add(key);
+function acknowledge(step: Step): void {
+  acknowledged.add(step);
   render();
 }
 
@@ -449,6 +633,7 @@ function renderBlock(
 
   const wrapper = document.createElement('li');
   wrapper.className = 'repeat';
+  wrapper.dataset.block = String(blockIndex);
 
   const head = document.createElement('div');
   head.className = 'repeat__head';
@@ -459,16 +644,23 @@ function renderBlock(
   const stepper = document.createElement('input');
   stepper.type = 'number';
   stepper.min = '2';
-  stepper.max = '30';
+  // From the validator, so the field and the rule that rejects it cannot drift.
+  stepper.max = String(MAX_REPS);
   stepper.step = '1';
   stepper.value = String(block.reps);
   stepper.setAttribute('aria-label', 'Number of repeats');
   stepper.addEventListener('change', () => {
-    const next = Number(stepper.value);
-    if (Number.isFinite(next) && next >= 1) {
-      block.reps = Math.round(next);
-      render();
+    const next = Math.round(Number(stepper.value));
+    // The schema's minimum is 2, and it is the schema that decides: a repeat of
+    // one is not a repeat. Accepting 1 here built a workout the server would
+    // reject, and the rejection arrived as a failed send rather than as anything
+    // pointing at the field that caused it.
+    if (Number.isFinite(next) && next >= 2 && next <= MAX_REPS) {
+      block.reps = next;
     }
+    // Repainted either way, so a rejected entry visibly snaps back rather than
+    // leaving a number on screen that is not the one in the workout.
+    render();
   });
 
   count.append(stepper, document.createTextNode('×'));
@@ -494,6 +686,21 @@ function renderBlock(
     inner.append(renderStep(step, blockIndex, stepIndex, start + stepIndex, total));
   });
   wrapper.append(inner);
+
+  // Adding to a set is a different act from adding to the workout — one step
+  // here becomes `reps` steps on the watch — so the control sits inside the set
+  // it joins and says so.
+  const addRow = document.createElement('div');
+  addRow.className = 'repeat__add';
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.className = 'link';
+  addButton.textContent = '+ Add to this set';
+  addButton.setAttribute('aria-label', `Add a step to the ${block.reps}× set`);
+  const addSelector = `.repeat[data-block="${blockIndex}"] .repeat__add button`;
+  addButton.addEventListener('click', () => addStep(blockIndex, addSelector));
+  addRow.append(addButton);
+  wrapper.append(addRow);
 
   for (const error of errorsFor(blockIndex, null)) {
     const message = document.createElement('p');
@@ -554,6 +761,13 @@ function renderNotice(outstanding: number, total: number): void {
 function render(): void {
   if (!workout) return;
 
+  // Re-derived, not carried. Every amount, type, cue and step in this workout is
+  // editable, so a list of errors computed at parse time describes a workout that
+  // no longer exists — it kept flagging steps that had been corrected, and said
+  // nothing about ones an edit had just broken. This is the same function the
+  // server runs, over what is actually on screen.
+  validationErrors = validateWorkout(workout);
+
   el<HTMLInputElement>('workout-name').value = workout.name;
   el('restatement').textContent = toPlainEnglish(workout);
 
@@ -584,7 +798,14 @@ function render(): void {
   // A global failure and outstanding confirmations are different problems, so
   // they get different places to appear: the banner tracks review progress, the
   // "Won't send" card states what is blocking the send.
-  if (globalErrors.length > 0) showBlocker(globalErrors[0]!.message);
+  //
+  // Painted from state on every render rather than only switched on. It was only
+  // ever switched on, so the card outlived its own cause: shorten the step that
+  // pushed the workout over three hours and the warning stayed on screen, still
+  // insisting on a problem that had just been fixed.
+  const blocker = globalErrors[0]?.message ?? sendFailure;
+  if (blocker) showBlocker(blocker);
+  else clearBlocker();
 
   const sendButton = el<HTMLButtonElement>('send');
 
@@ -618,12 +839,27 @@ function show(view: 'paste' | 'review' | 'success'): void {
   }
   // The spine is only meaningful once there is something to check.
   el('spine').classList.toggle('hidden', view !== 'review');
+  // So is the aside — and nothing was unhiding it. The markup ships it `hidden`
+  // and the line that used to reveal it was replaced by the spine toggle above,
+  // so "What you entered" and "Goes out as" have not appeared since. The payload
+  // preview is the only place the outgoing description is visible before it is
+  // sent, and on desktop its absence left .shell--review a two-column grid with
+  // one column of content.
+  el('original').classList.toggle('hidden', view !== 'review');
   document.querySelector('.shell')?.classList.toggle('shell--review', view === 'review');
   if (view !== 'review') closeSheetIfOpen();
 }
 
 function closeSheetIfOpen(): void {
-  if (sheet) closeSheet();
+  if (!sheet) return;
+  const discard = sheet.isNew
+    ? { blockIndex: sheet.blockIndex, stepIndex: sheet.stepIndex }
+    : null;
+  closeSheet();
+  // Leaving the view is a cancel too, so a half-added step goes with it. No
+  // focus restoration and no re-render: the table it belonged to is on its way
+  // off screen, and coming back always arrives through a fresh parse.
+  if (discard) removeStep(discard.blockIndex, discard.stepIndex);
 }
 
 function showError(message: string): void {
@@ -632,12 +868,20 @@ function showError(message: string): void {
   panel.classList.remove('hidden');
 }
 
+/** Local date, not UTC — a workout is planned against the day the athlete is in. */
+function localDate(date: Date): string {
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function todayHere(): string {
+  return localDate(new Date());
+}
+
 function tomorrow(): string {
   const date = new Date();
   date.setDate(date.getDate() + 1);
-  // Local date, not UTC — a workout is planned against the day the athlete is in.
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+  return localDate(date);
 }
 
 async function convert(): Promise<void> {
@@ -666,10 +910,11 @@ async function convert(): Promise<void> {
     }
 
     workout = payload.workout;
-    validationErrors = payload.validationErrors ?? [];
     originalText = text;
-    acknowledged.clear();
-    clearBlocker();
+    // A fresh set rather than a cleared one: WeakSet has no clear(), and the old
+    // steps are unreachable the moment `workout` is replaced anyway.
+    acknowledged = new WeakSet<Step>();
+    sendFailure = null;
     el('original-text').textContent = originalText;
     el<HTMLInputElement>('date').value = tomorrow();
     show('review');
@@ -683,7 +928,7 @@ async function convert(): Promise<void> {
 }
 
 function failSend(message: string): void {
-  showBlocker(message);
+  sendFailure = message;
   sending = false;
   render();
 }
@@ -692,7 +937,7 @@ async function send(): Promise<void> {
   if (!workout || sending) return;
 
   const date = el<HTMLInputElement>('date').value;
-  clearBlocker();
+  sendFailure = null;
   sending = true;
   render();
 
@@ -838,8 +1083,12 @@ async function askToClear(scope: ClearScope): Promise<void> {
 
   try {
     const athlete = currentAthleteId();
+    // The Worker's clock is UTC, which for the first ten hours of an Australian
+    // day is still yesterday — long enough to count this morning's session as
+    // "upcoming". The server takes this only if it is within a day of its own.
     const response = await fetch(
-      `/api/clear?scope=${scope}${athlete ? `&athlete=${encodeURIComponent(athlete)}` : ''}`,
+      `/api/clear?scope=${scope}&today=${todayHere()}` +
+        (athlete ? `&athlete=${encodeURIComponent(athlete)}` : ''),
     );
     const payload = (await response.json()) as {
       count?: number;
@@ -884,11 +1133,17 @@ async function doClear(): Promise<void> {
     const response = await fetch('/api/clear', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ scope, confirm: scope, athlete: currentAthleteId() }),
+      body: JSON.stringify({
+        scope,
+        confirm: scope,
+        athlete: currentAthleteId(),
+        today: todayHere(),
+      }),
     });
     const payload = (await response.json()) as {
       deleted?: number;
       failed?: number;
+      remaining?: number;
       athlete?: string;
       error?: string;
     };
@@ -899,12 +1154,15 @@ async function doClear(): Promise<void> {
     }
 
     const failed = payload.failed ?? 0;
-    clearStatus(
-      failed > 0
-        ? `Removed ${payload.deleted}. ${failed} could not be removed.`
-        : `Removed ${payload.deleted}.`,
-      failed > 0,
-    );
+    const remaining = payload.remaining ?? 0;
+
+    // A capped run is not a failure, so it does not read as one — but it does
+    // have to say that there is more, or the count looks simply wrong.
+    const parts = [`Removed ${payload.deleted}.`];
+    if (failed > 0) parts.push(`${failed} could not be removed.`);
+    if (remaining > 0) parts.push(`${remaining} still to go — press again.`);
+
+    clearStatus(parts.join(' '), failed > 0);
   } catch {
     clearStatus('Could not reach the server.', true);
   }
@@ -924,6 +1182,21 @@ function initSheet(): void {
     if (sheet) sheet.type = typeSelect.value as Step['type'];
   });
 
+  /*
+   * The amount is mirrored into sheet state on input for one reason: paintSheet()
+   * rewrites the field from `sheet.value`, and the ends toggle calls paintSheet().
+   * Without this, typing 1200, flipping to "Until lap press" and flipping back
+   * put 800 in the box again — the value the sheet opened on — and saving then
+   * quietly stored the wrong distance.
+   */
+  const valueInput = el<HTMLInputElement>('sheet-value');
+  valueInput.addEventListener('input', () => {
+    const next = Number(valueInput.value);
+    // A half-cleared field is not a value to remember; the one it opened on
+    // stands until something usable replaces it.
+    if (sheet && Number.isFinite(next) && next > 0) sheet.value = next;
+  });
+
   const unitSelect = el<HTMLSelectElement>('sheet-unit');
   for (const unit of ['s', 'min', 'm', 'km']) {
     const option = document.createElement('option');
@@ -933,6 +1206,26 @@ function initSheet(): void {
   }
   unitSelect.addEventListener('change', () => {
     if (sheet) sheet.unit = unitSelect.value;
+  });
+
+  /*
+   * The cue is the one free-text field besides the workout name, and it is only
+   * safe to be one because it is corrected on every keystroke rather than at
+   * send time. Type "800m hard" and the field reads "m hard" as you type — the
+   * number never lands, and there is no gap between what is shown here and what
+   * reaches the watch.
+   */
+  const cueInput = el<HTMLInputElement>('sheet-cue');
+  cueInput.addEventListener('input', () => {
+    const cleaned = sanitiseCueInput(cueInput.value);
+    if (cleaned !== cueInput.value) {
+      // Keep the caret where the typing was, rather than throwing it to the end
+      // on every stripped character.
+      const caret = Math.max(0, (cueInput.selectionStart ?? cleaned.length) - 1);
+      cueInput.value = cleaned;
+      cueInput.setSelectionRange(caret, caret);
+    }
+    if (sheet) sheet.cue = cueInput.value;
   });
 
   for (const [id, lap] of [
@@ -947,19 +1240,20 @@ function initSheet(): void {
   }
 
   el('sheet-save').addEventListener('click', () => saveSheet());
-  el('sheet-cancel').addEventListener('click', () => closeSheet());
-  el('sheet-close').addEventListener('click', () => closeSheet());
+  el('sheet-remove').addEventListener('click', () => removeFromSheet());
+  el('sheet-cancel').addEventListener('click', () => cancelSheet());
+  el('sheet-close').addEventListener('click', () => cancelSheet());
 
   // Clicking the scrim is a cancel, not a save.
   el('sheet').addEventListener('click', (event) => {
-    if (event.target === el('sheet')) closeSheet();
+    if (event.target === el('sheet')) cancelSheet();
   });
 
   document.addEventListener('keydown', (event) => {
     if (!sheet) return;
     if (event.key === 'Escape') {
       event.preventDefault();
-      closeSheet();
+      cancelSheet();
       return;
     }
     if (event.key !== 'Tab') return;
@@ -1008,9 +1302,12 @@ export function init(): void {
     el<HTMLTextAreaElement>('paste').value = '';
     workout = null;
     sending = false;
+    sendFailure = null;
     clearBlocker();
     show('paste');
   });
+
+  el('add-step').addEventListener('click', () => addStep(null, '#add-step'));
 
   el('clear-toggle').addEventListener('click', () => {
     const panel = el('clear-body');

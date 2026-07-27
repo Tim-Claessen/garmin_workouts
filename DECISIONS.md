@@ -139,3 +139,15 @@ One line per decision, with the reason. Newest at the bottom.
   alternative is a placeholder so small it looks wrong on the watch.
 - **The roster is re-read on every request.** No caching. Fine at one session a
   week, and it means a secret change takes effect immediately.
+- **A clear deletes at most 200 workouts per press.** Intervals.icu has no bulk
+  delete, so a clear costs one subrequest per workout and a full season's
+  calendar can exceed what one Worker invocation is allowed — where it would die
+  part-way with no record of how far it got. Oldest first, so a capped run always
+  clears a prefix and pressing again resumes exactly where it stopped. The status
+  line says how many are left.
+- **The browser tells the Worker what day it is, within a day.** A Worker's clock
+  is UTC, which in Australia is still yesterday for the first ten hours of every
+  local day — long enough for "upcoming" to sweep up a session already run this
+  morning. `resolveToday()` honours the browser's date only when it is well-formed
+  and within one day of UTC: the exact span real timezone offsets cover, so a
+  wrong or crafted clock cannot widen an irreversible deletion beyond it.

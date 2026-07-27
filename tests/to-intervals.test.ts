@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CUE_MAX_LENGTH,
   formatDistance,
   formatStep,
   formatTime,
   sanitiseCue,
+  sanitiseCueInput,
   toDescription,
   toIntervalsEvent,
 } from '../src/lib/to-intervals';
@@ -59,6 +61,53 @@ describe('sanitiseCue', () => {
     expect(sanitiseCue(undefined)).toBe('');
     expect(sanitiseCue('   ')).toBe('');
     expect(sanitiseCue('123')).toBe('');
+  });
+});
+
+/**
+ * The cue is editable on the review screen, which makes it the only free-text
+ * field besides the workout name. It is safe to be one because this runs on every
+ * keystroke: a digit is gone before it can be stored, rather than being quietly
+ * removed at send time and leaving the field disagreeing with the watch.
+ */
+describe('sanitiseCueInput', () => {
+  it('lets a trailing space stand so a second word can be typed', () => {
+    // The whole reason this exists separately from sanitiseCue. Trimming on
+    // every keystroke makes the space between two words impossible to enter.
+    expect(sanitiseCueInput('comfortably ')).toBe('comfortably ');
+    expect(sanitiseCueInput('comfortably h')).toBe('comfortably h');
+  });
+
+  it('strips digits as they are typed, leaving no gap behind them', () => {
+    expect(sanitiseCueInput('800m hard')).toBe('m hard');
+    // Typed one character at a time, a leading number never appears at all:
+    // each keystroke is stripped and the leading space goes with it.
+    expect(sanitiseCueInput('8')).toBe('');
+    expect(sanitiseCueInput('80')).toBe('');
+  });
+
+  it('still drops leading whitespace, so a cue cannot start with a gap', () => {
+    expect(sanitiseCueInput('   easy')).toBe('easy');
+  });
+
+  it('caps at the emitted length, so nothing is lost after the field says it fits', () => {
+    expect(sanitiseCueInput('a'.repeat(60))).toHaveLength(CUE_MAX_LENGTH);
+  });
+
+  it('agrees with sanitiseCue once trimmed', () => {
+    // The property the review screen depends on: what the field shows is what
+    // goes out. If these two ever diverge, the field is lying.
+    for (const value of [
+      'threshold effort',
+      '   easy    jog   ',
+      '6x800',
+      'comfortably hard',
+      'a'.repeat(60),
+      '123',
+      '',
+    ]) {
+      expect(sanitiseCueInput(value).trim(), value).toBe(sanitiseCue(value));
+    }
   });
 });
 

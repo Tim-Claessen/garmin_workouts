@@ -128,6 +128,9 @@ function normaliseStep(raw: ModelStep): Step | null {
   const untilLapPress = raw.untilLapPress === true;
 
   let duration: Step['duration'] | null = null;
+  /** True when the number below came from us, not from the model. */
+  let substituted = false;
+
   if (raw.durationKind === 'distance' && typeof raw.metres === 'number' && raw.metres > 0) {
     duration = { kind: 'distance', metres: Math.round(raw.metres) };
   } else if (
@@ -140,6 +143,7 @@ function normaliseStep(raw: ModelStep): Step | null {
     // A lap-press step still needs the placeholder Intervals.icu requires, so
     // supply one rather than discarding an otherwise good step.
     duration = { kind: 'distance', metres: 2000 };
+    substituted = true;
   }
 
   if (!duration) return null;
@@ -154,7 +158,14 @@ function normaliseStep(raw: ModelStep): Step | null {
     ...(note ? { note } : {}),
     // A step whose duration we had to substitute is inferred whatever the model
     // claimed, because we made it up rather than reading it.
-    source: untilLapPress && raw.durationKind === undefined ? 'inferred' : toSource(raw.inferred),
+    //
+    // The earlier test for this was `raw.durationKind === undefined`, which never
+    // fired: durationKind is required by the model schema and the prompt asks for
+    // "distance" explicitly on open-ended steps. The case that actually occurs is
+    // a durationKind with no usable number beside it, and it was reaching the
+    // review screen as `parsed` — an invented 2 km presented as something the
+    // athlete had written, needing no confirmation.
+    source: substituted ? 'inferred' : toSource(raw.inferred),
   };
 }
 

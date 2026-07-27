@@ -28,6 +28,12 @@ from the live API that cannot be derived from first principles.
 - **Step cues carry the athlete's wording, never digits.** `sanitiseCue()` strips
   every number before a note reaches the description. A cue is worth having, but
   not at the price of reintroducing the unit trap through the back door.
+  The cue is editable on the review screen, which makes it the only free-text
+  field besides the workout name. It is allowed to be one because
+  `sanitiseCueInput()` runs on **every keystroke**, so a digit never survives long
+  enough to be stored. Keep those two functions in agreement — the property the
+  screen relies on is that what the field shows is what reaches the watch, and
+  there is a test asserting exactly that.
 - **Bulk deletion only ever touches `category: "WORKOUT"`, and never recorded
   activities.** The calendar holds season markers, notes and races this app did
   not create, and completed runs are training history. Both are off limits.
@@ -54,7 +60,22 @@ from the live API that cannot be derived from first principles.
   testable under Node. `roster.ts` is the thin binding-backed wrapper.
 - Client state that gates a button (`sending`) lives in a variable and is applied
   in `render()`, never written straight onto the DOM node. Writing it directly is
-  what left the send button stranded on "Sending…" after a view change.
+  what left the send button stranded on "Sending…" after a view change. The same
+  rule covers the "Won't send" card (`sendFailure`) and the sheet's own fields:
+  anything `paintSheet()` rewrites must be mirrored into sheet state on input, or
+  a repaint discards what was just typed.
+- **Confirmations are keyed by step identity, not position.** `acknowledged` is a
+  `WeakSet<Step>`. Positional keys were correct only while the workout's shape was
+  fixed; now that steps can be added and removed, an index-keyed confirmation
+  slides onto whichever step moves into that slot — marking an unreviewed guess
+  as reviewed, which is the one thing the review screen exists to prevent.
+- **The review screen re-derives its validation errors on every render**, rather
+  than holding the list `/api/parse` returned. Every value on that screen is
+  editable, so a list computed before the first edit describes a workout that no
+  longer exists.
+- **A step added by hand is `parsed`, not `inferred`.** `inferred` means the model
+  supplied something the text did not. Asking someone to confirm their own typing
+  is how confirmation becomes a reflex.
 - The stylesheet is two files on purpose. `tokens.css` is the **design export**
   and is kept identical to it, so a new export can replace it wholesale;
   `app.css` is composition above the tokens and invents no values of its own.
@@ -84,7 +105,22 @@ from the live API that cannot be derived from first principles.
 - `Astro.clientAddress` is not implemented by the Cloudflare adapter. Use the
   `cf-connecting-ip` header.
 - Stop `wrangler dev` before building — it holds `dist/` open on Windows and the
-  build fails with EPERM.
+  build fails with EPERM. To check a build without stopping it, pass
+  `astro build --outDir <somewhere else>`.
+- **Browser code and Worker code cannot share a tsconfig.**
+  `worker-configuration.d.ts` declares a global `interface Element` —
+  HTMLRewriter's, not the DOM's. Same-named global interfaces merge, and a member
+  declared directly on the merged interface shadows the one it would otherwise
+  inherit, so workerd's `append(content: string | ReadableStream | Response)`
+  hides `ParentNode.append(...nodes)` and its `remove(): Element` hides
+  `ChildNode.remove(): void`. That is 33 errors in `review.ts` and an
+  unsatisfiable `<T extends HTMLElement>`. No lib or ordering setting fixes it.
+  `tsconfig.json` covers the Worker side and excludes `src/client`;
+  `tsconfig.client.json` covers the browser side and excludes the generated
+  types. `npm run typecheck` runs both. `tsconfig.client.json` lists only
+  `src/client/**` and lets resolution pull the rest in — if it ever fails on
+  `cloudflare:workers`, a binding-backed module has been imported into the
+  browser, which is the boundary working.
 
 ## Testing
 
