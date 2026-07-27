@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatDistance,
+  formatStep,
   formatTime,
+  sanitiseCue,
   toDescription,
   toIntervalsEvent,
 } from '../src/lib/to-intervals';
@@ -30,6 +32,55 @@ describe('formatDistance — the m/mtr trap', () => {
       expect(formatDistance(metres)).not.toMatch(/\d\s*m$/);
       expect(formatDistance(metres)).toMatch(/km$/);
     }
+  });
+});
+
+describe('sanitiseCue', () => {
+  it('keeps the athlete\'s wording', () => {
+    expect(sanitiseCue('threshold effort')).toBe('threshold effort');
+    expect(sanitiseCue('jog back')).toBe('jog back');
+    expect(sanitiseCue('comfortably hard')).toBe('comfortably hard');
+  });
+
+  it('strips every digit', () => {
+    // A number in a cue can be read as a duration by the Intervals.icu parser,
+    // which is the 400m-becomes-400-minutes failure by another route.
+    expect(sanitiseCue('400m reps')).not.toMatch(/[0-9]/);
+    expect(sanitiseCue('90s recovery')).not.toMatch(/[0-9]/);
+    expect(sanitiseCue('6x800')).toBe('x');
+  });
+
+  it('caps length and tidies whitespace', () => {
+    expect(sanitiseCue('   easy    jog   ')).toBe('easy jog');
+    expect(sanitiseCue('a'.repeat(60)).length).toBeLessThanOrEqual(24);
+  });
+
+  it('returns empty for nothing usable', () => {
+    expect(sanitiseCue(undefined)).toBe('');
+    expect(sanitiseCue('   ')).toBe('');
+    expect(sanitiseCue('123')).toBe('');
+  });
+});
+
+describe('step cues', () => {
+  it('places the cue before the duration', () => {
+    const step = distanceStep('run', 800, { note: 'threshold' });
+    expect(formatStep(step)).toBe('- threshold 0.8km');
+  });
+
+  it('keeps the lap-press flag first', () => {
+    const step = distanceStep('warmup', 2000, { untilLapPress: true, note: 'easy jog' });
+    expect(formatStep(step)).toBe('- Press lap easy jog 2km');
+  });
+
+  it('omits the cue when there is no note', () => {
+    expect(formatStep(distanceStep('run', 800))).toBe('- 0.8km');
+  });
+
+  it('never lets a note reintroduce a bare metre value', () => {
+    const step = distanceStep('run', 800, { note: 'do 400m floats' });
+    expect(formatStep(step)).not.toMatch(/\d\s*m\b(?!$)/);
+    expect(formatStep(step).endsWith('0.8km')).toBe(true);
   });
 });
 

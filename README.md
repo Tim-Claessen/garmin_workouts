@@ -33,7 +33,42 @@ review screen ──► every inferred value acknowledged by hand
 | [src/lib/ai.ts](src/lib/ai.ts) | The only file that touches the AI binding |
 | [src/lib/to-intervals.ts](src/lib/to-intervals.ts) | Emits the Intervals.icu description **string** |
 | [src/lib/to-plain-english.ts](src/lib/to-plain-english.ts) | The restatement. Never model-generated |
+| [src/lib/intervals-admin.ts](src/lib/intervals-admin.ts) | Bulk removal of planned workouts |
 | [src/client/review.ts](src/client/review.ts) | The review screen |
+
+## Step cues — your words on the watch
+
+Intervals.icu has **no separate notes field**. `description` is the only free
+text and it doubles as the workout syntax, so the pasted session cannot be
+shipped through verbatim: any number in it would be parsed as a duration.
+
+What does work is a *cue* — text placed before the duration on a step line, which
+Intervals.icu stores as the step's `text` and which shows on the watch mid-run:
+
+```
+- threshold effort 0.8km   →   { text: "threshold effort", distance: 800 }
+```
+
+So the parser lifts a short label from the athlete's own wording ("threshold",
+"jog back", "easy") into `note`, and the emitter puts it in front of the
+duration. `sanitiseCue()` strips **every digit** before it goes anywhere near the
+description — a number in a cue is the 26-hour failure by another route.
+
+## Clearing the calendar
+
+The Intervals.icu web interface makes bulk tidying painful, so the paste screen
+has a collapsed panel to remove planned workouts: upcoming, past, or all. It
+counts first, states the number, and requires a second confirmation.
+
+Two hard limits, both deliberate:
+
+- **Only `category: "WORKOUT"` is ever deleted.** The calendar also holds season
+  markers, notes and races that this app did not create.
+- **Recorded activities are never touched.** Completed runs live on a different
+  endpoint. This removes *planned* workouts only, never training history.
+
+Deleting a planned workout does **not** remove a copy already synced to the
+watch.
 
 ## One-time setup
 
@@ -160,3 +195,52 @@ accepts with HTTP 200 and no warning.
 number followed by `m` for a distance; everything goes out as `km`, and a test
 asserts it. See [docs/intervals-syntax.md](docs/intervals-syntax.md) for the
 captured payloads.
+
+## TODO
+
+### Untested in the real world
+
+- [ ] **`/api/send` end to end.** Written, revalidated server-side, never run
+      against a live calendar. First run should be a throwaway date, watched.
+- [ ] **Clearing the calendar.** Scope logic is unit tested and single-event
+      DELETE is proven, but the bulk path has never run. Try `Upcoming` with one
+      disposable workout before trusting `Everything`.
+- [ ] **Step cues on the watch.** Confirmed they parse and store correctly.
+      Nobody has looked at a watch to see how they display.
+
+### Security and access
+
+- [ ] **Rotate `ICU_API_KEY`.** The original is still live and has appeared in a
+      chat transcript.
+- [ ] Confirm a non-allowlisted email is actually rejected by Access.
+- [ ] Add Zoe's address to the Access policy.
+- [ ] Delete the leftover test events from the Intervals.icu calendar
+      ("API test A", "Testing").
+
+### Setup still to do
+
+- [ ] Zoe's Intervals.icu account, Garmin connection, and **Upload planned
+      workouts** ticked.
+- [ ] Point `ICU_ATHLETE_ID` at her athlete ID once it exists.
+- [ ] Write `docs/for-zoe.md` — three sentences: build it the night before, open
+      Garmin Connect to sync, the lap button skips to the next step.
+
+### Open questions
+
+- [ ] **Does the watch show "until lap press" or a countdown from the 2km
+      placeholder?** If it counts down, the dashed-rail treatment on the review
+      screen contradicts what she'll actually see. This one has design
+      consequences.
+- [ ] Whether a lap-press placeholder can be trivially small (`1s`) without the
+      watch behaving oddly. Would simplify generation.
+
+### Quality
+
+- [ ] **Replace the synthetic fixtures with real sessions** from Zoe's program.
+      They currently test the failure modes we predicted, not necessarily the
+      ones that occur.
+- [ ] Fixture 05 fails: "finish with an easy 10" reads as a distance rather than
+      10 minutes. Genuinely ambiguous — left failing on purpose rather than
+      tuned away.
+- [ ] The review screen has had no accessibility pass beyond focus rings and
+      44px targets.

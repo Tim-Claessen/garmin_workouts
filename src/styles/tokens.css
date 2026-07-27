@@ -268,6 +268,11 @@ textarea::placeholder {
   margin-top: var(--space-1);
 }
 
+.controls .btn {
+  width: auto;
+  margin-top: 0;
+}
+
 select,
 input[type='number'],
 input[type='date'],
@@ -286,23 +291,71 @@ input[type='number'] {
 
 /* ---- Inference acknowledgement ------------------------------------------- */
 
+/*
+ * Understated on purpose. Amber still means "not agreed to yet", but the rail
+ * already carries that signal — the control only needs to offer the action, not
+ * shout about it. No icon, no rule, small type.
+ */
 .ack {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  min-height: 32px;
   margin-top: var(--space-1);
-  padding: 0 var(--space-1);
+  padding: 0 10px;
   background: transparent;
   color: var(--infer);
-  border: 1px solid var(--infer);
+  border: 1px solid color-mix(in srgb, var(--infer) 40%, transparent);
   border-radius: var(--radius);
-  font: inherit;
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
   cursor: pointer;
 }
 
-.ack__mark {
-  font-family: var(--font-data);
-  font-weight: 600;
+.ack:hover {
+  border-color: var(--infer);
+}
+
+/* ---- Segmented toggle ---------------------------------------------------- */
+
+.toggle {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.toggle__option {
+  min-height: 44px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.toggle__option + .toggle__option {
+  border-left: 1px solid var(--line);
+}
+
+/* The selected side is filled, so the pair reads as a choice, not a button. */
+.toggle__option[aria-pressed='true'] {
+  background: var(--signal);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* ---- Danger zone --------------------------------------------------------- */
+
+.danger-zone {
+  margin-top: var(--space-4);
+}
+
+.btn--danger {
+  width: auto;
+  background: var(--danger);
+  color: var(--text);
 }
 
 .notice {

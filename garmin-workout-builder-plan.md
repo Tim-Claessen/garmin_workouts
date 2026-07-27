@@ -4,6 +4,35 @@ A single-page tool that turns a pasted running session into a structured workout
 
 ---
 
+## Status — 27 July 2026
+
+**Phases 0 through 5 are built and deployed.** Live at `run.timclaessen.com` behind Cloudflare Access. 40 offline tests pass; the golden suite measures 5/6 (83%).
+
+This plan is kept as the original reasoning. Where the build disagrees with it, **the build is right** — several assumptions here were disproved by the live API. Current truth lives in [README.md](README.md), [DECISIONS.md](DECISIONS.md) and [docs/intervals-syntax.md](docs/intervals-syntax.md); outstanding work is the TODO section of the README.
+
+### What the plan got wrong
+
+| Plan said | Reality |
+| --- | --- |
+| Duration is one of time, distance, **or lap-press** | Lap-press is a **flag** on a step that still carries a placeholder duration. Not mutually exclusive |
+| `to-intervals.ts` emits an event payload | It emits a **description string**. The API does not accept a structured step tree; it parses text server-side |
+| Anthropic API for parsing | **Workers AI** (`llama-3.3-70b`, JSON-schema mode). No model provider key stored at all |
+| Astro + Cloudflare **Pages** | **Workers with static assets**. Pages entered maintenance mode in March 2026 |
+| Three secrets incl. `ANTHROPIC_API_KEY` | Two. Workers AI is a binding |
+
+### What was skipped
+
+**Test 0.5 — collecting 5–8 real sessions.** The fixtures are synthetic, so the 83% measures the failure modes we *predicted*, not necessarily the ones that occur. Replacing them is the highest-value quality task outstanding.
+
+### What was added beyond the plan
+
+- **Step cues** carrying the athlete's own wording ("threshold", "jog back") through to the watch, since Intervals.icu has no notes field
+- **Bulk clearing** of planned workouts — upcoming, past or all — because the Intervals.icu interface makes tidying painful
+- **Access JWT verification** inside the Worker, on top of edge Access
+- **CI deployment** via Cloudflare Workers Builds on push to `main`
+
+---
+
 ## 0. Decisions locked in
 
 | Decision          | Choice                                              | Why                                                                   |
@@ -11,10 +40,11 @@ A single-page tool that turns a pasted running session into a structured workout
 | Users             | Zoe (primary), Tim (setup/admin)                    | Two people, no user management needed                                 |
 | Frequency         | One session at a time, ~weekly                      | Stateless app, no history, no database                                |
 | Targets           | Time and distance only. No pace or HR targets       | Removes threshold-pace setup and the biggest AI hallucination surface |
-| Open-ended steps  | Lap-button-press for warm-up and cool-down          | Native Garmin duration type; matches how Zoe already runs             |
+| Open-ended steps  | Lap-button-press for warm-up and cool-down          | Matches how Zoe already runs. ⚠ Implemented as a *flag* plus a placeholder duration, not a duration type — see the status section |
 | Delivery to watch | Intervals.icu API → Garmin Connect sync             | Sanctioned API, free, supports the press-lap flag                     |
-| Auth              | Cloudflare Access, email OTP, two-address allowlist | Protects the Anthropic API key. No code, no password reset flow       |
-| Stack             | Astro + Cloudflare Pages/Workers                    | Consistent with existing projects                                     |
+| Auth              | Cloudflare Access, email OTP, two-address allowlist | Protects the credentials. No code, no password reset flow             |
+| Stack             | Astro + Cloudflare **Workers** (static assets)      | Pages entered maintenance mode; Workers reached parity                |
+| Parsing           | **Workers AI**, not the Anthropic API               | No model provider key stored anywhere; consistent with the other projects on the account |
 | Review model      | Nothing reaches Garmin without an explicit confirm  | Core requirement                                                      |
 
 **Not building:** accounts, history, multi-week programs, pace zones, editing after push, mobile app, offline mode.

@@ -22,6 +22,12 @@ from the live API that cannot be derived from first principles.
   for AI-inferred values awaiting confirmation and appears nowhere else — not on
   hover, not on focus, not as an accent.
 - **One page. No database. No accounts. No history.**
+- **Step cues carry the athlete's wording, never digits.** `sanitiseCue()` strips
+  every number before a note reaches the description. A cue is worth having, but
+  not at the price of reintroducing the unit trap through the back door.
+- **Bulk deletion only ever touches `category: "WORKOUT"`, and never recorded
+  activities.** The calendar holds season markers, notes and races this app did
+  not create, and completed runs are training history. Both are off limits.
 
 ## Shape of the code
 
@@ -35,6 +41,12 @@ from the live API that cannot be derived from first principles.
   reflects exactly what will be sent.
 - Lap-press is a **boolean flag on a step**, not a duration variant. The step
   still carries a placeholder duration that Intervals.icu requires.
+- `intervals-admin.ts` takes credentials as an argument rather than reading the
+  binding, for the same reason as `parse.ts`: it keeps the scope logic — which
+  decides what gets irreversibly deleted — unit testable under Node.
+- Client state that gates a button (`sending`) lives in a variable and is applied
+  in `render()`, never written straight onto the DOM node. Writing it directly is
+  what left the send button stranded on "Sending…" after a view change.
 
 ## Gotchas
 

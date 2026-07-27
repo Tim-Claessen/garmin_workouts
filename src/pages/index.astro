@@ -36,6 +36,38 @@ const email = Astro.locals.accessEmail;
         <p id="parse-error" class="panel error-panel hidden"></p>
 
         <button id="convert" class="btn" type="button">Convert</button>
+
+        <!-- Destructive, so kept collapsed and out of the main flow -->
+        <div class="panel danger-zone">
+          <button id="clear-toggle" class="btn btn--quiet" type="button">
+            Clear Intervals.icu workouts
+          </button>
+
+          <div id="clear-body" class="hidden">
+            <p class="notice">
+              Removes planned workouts from the Intervals.icu calendar. Recorded
+              activities and anything that is not a workout are left alone. This
+              cannot be undone, and it will not remove workouts already synced to
+              the watch.
+            </p>
+
+            <div class="controls">
+              <button id="clear-future" class="btn btn--quiet" type="button">Upcoming</button>
+              <button id="clear-past" class="btn btn--quiet" type="button">Past</button>
+              <button id="clear-all" class="btn btn--quiet" type="button">Everything</button>
+            </div>
+
+            <div id="clear-confirm" class="hidden">
+              <p id="clear-confirm-text" class="notice error"></p>
+              <div class="controls">
+                <button id="clear-go" class="btn btn--danger" type="button">Delete them</button>
+                <button id="clear-cancel" class="btn btn--quiet" type="button">Cancel</button>
+              </div>
+            </div>
+
+            <p id="clear-status" class="notice"></p>
+          </div>
+        </div>
       </section>
 
       <!-- Review -->

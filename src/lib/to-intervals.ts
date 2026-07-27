@@ -37,6 +37,26 @@ export function formatTime(seconds: number): string {
   return `${seconds}s`;
 }
 
+/**
+ * Text placed before the duration on a step line becomes a cue that Intervals.icu
+ * stores as the step's `text`, and that is what shows on the watch mid-run. It
+ * carries the athlete's own wording through instead of a generic label.
+ *
+ * Digits are stripped, without exception. Anything numeric in a cue risks being
+ * read as a duration by the Intervals.icu parser, which is the 26-hour failure
+ * all over again. A cue is worth having, but never at that price.
+ */
+export function sanitiseCue(note: string | undefined): string {
+  if (!note) return '';
+  return note
+    .replace(/[0-9]/g, ' ')
+    .replace(/[^a-zA-Z\s'-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 24)
+    .trim();
+}
+
 export function formatStep(step: Step): string {
   const duration =
     step.duration.kind === 'time'
@@ -46,8 +66,9 @@ export function formatStep(step: Step): string {
   // The literal text "Press lap" is what sets `until_lap_press: true` when
   // Intervals.icu parses the description. The duration is still required and
   // acts as a placeholder the lap press overrides.
-  const prefix = step.untilLapPress ? 'Press lap ' : '';
-  return `- ${prefix}${duration}`;
+  const lap = step.untilLapPress ? 'Press lap ' : '';
+  const cue = sanitiseCue(step.note);
+  return `- ${lap}${cue ? `${cue} ` : ''}${duration}`;
 }
 
 /**

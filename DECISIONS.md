@@ -80,6 +80,36 @@ One line per decision, with the reason. Newest at the bottom.
   skipped. They test the failure modes we predicted, not necessarily the ones that
   occur. Replace as real sessions arrive.
 
+## Notes on the watch
+
+- **Step cues rather than a notes field.** Intervals.icu has no separate notes
+  field — `description` is the only free text and it doubles as the workout
+  syntax, so the pasted session cannot be shipped verbatim without its numbers
+  being parsed as durations. Text placed before the duration on a step line
+  becomes the step's `text`, which is what shows on the watch. Verified against
+  the live API.
+- **Cues are stripped of every digit.** Not a cautious default — a number in a
+  cue is the 400m-becomes-400-minutes failure by another route. The cue is worth
+  having, but never at that price.
+- **The model copies the athlete's phrasing rather than paraphrasing.** "jog
+  back", "threshold", "comfortably hard". If the text says nothing about how a
+  step should feel, the note is omitted rather than invented.
+
+## Clearing the calendar
+
+- **Only planned workouts are deleted, never recorded activities.** Completed
+  runs are training history and live on a different endpoint. Deleting them was
+  never the intent behind "clear all activities" — the clutter this app creates
+  is planned workouts.
+- **Only `category: "WORKOUT"`.** The calendar also holds season markers, notes
+  and races. A real `SEASON_START` event on the calendar during development made
+  this concrete rather than theoretical.
+- **Today counts as upcoming, not past.** Keeps the two scopes disjoint and stops
+  a workout planned for this morning being swept up by "past".
+- **Count first, then confirm.** The confirmation states a number and the client
+  must echo the scope back to the endpoint. There is no undo, so a stray POST
+  should not be enough.
+
 ## Open
 
 - **Whether the watch shows "until lap press" or a countdown from the

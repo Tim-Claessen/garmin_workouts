@@ -44,6 +44,7 @@ const MODEL_JSON_SCHEMA = {
                 metres: { type: 'number' },
                 untilLapPress: { type: 'boolean' },
                 inferred: { type: 'boolean' },
+                note: { type: 'string' },
               },
               required: ['type', 'durationKind', 'untilLapPress', 'inferred'],
             },
@@ -80,7 +81,13 @@ OPEN-ENDED STEPS: if a warm-up or cool-down is mentioned with no duration or dis
 
 VAGUE RECOVERIES: "jog back", "same as effort", "full recovery" have no number. Choose a sensible recovery and mark it inferred: true.
 
-NAME: use the session's own title if it has one, otherwise a short descriptive name.`;
+NAME: use the session's own title if it has one, otherwise a short descriptive name.
+
+NOTE — this is what the athlete reads on their watch mid-run, so use THEIR words:
+- Set "note" to a short label taken from the source text, one to three words, in the wording the session used. "threshold", "hard", "jog back", "easy", "steady", "controlled".
+- Copy their phrasing rather than paraphrasing it. If they wrote "comfortably hard", the note is "comfortably hard".
+- Use letters only. No numbers, no units, no pace or heart-rate figures.
+- If the text says nothing about how a step should feel, leave "note" out entirely. Do not invent a description.`;
 
 interface ModelStep {
   type?: string;
@@ -89,6 +96,7 @@ interface ModelStep {
   metres?: number;
   untilLapPress?: boolean;
   inferred?: boolean;
+  note?: string;
 }
 
 interface ModelBlock {
@@ -136,11 +144,14 @@ function normaliseStep(raw: ModelStep): Step | null {
 
   if (!duration) return null;
 
+  const note = typeof raw.note === 'string' ? raw.note.trim().slice(0, 200) : undefined;
+
   return {
     kind: 'step',
     type,
     duration,
     untilLapPress,
+    ...(note ? { note } : {}),
     // A step whose duration we had to substitute is inferred whatever the model
     // claimed, because we made it up rather than reading it.
     source: untilLapPress && raw.durationKind === undefined ? 'inferred' : toSource(raw.inferred),

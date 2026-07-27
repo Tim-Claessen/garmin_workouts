@@ -36,6 +36,12 @@ const STEP_LABEL: Record<Step['type'], string> = {
 let workout: Workout | null = null;
 let originalText = '';
 let validationErrors: ValidationError[] = [];
+/**
+ * Whether a send is in flight. Held in state rather than read off the button,
+ * so that leaving the review view and coming back cannot strand the button
+ * disabled and reading "Sending…".
+ */
+let sending = false;
 /** Keys of inferred steps the user has confirmed. */
 const acknowledged = new Set<string>();
 
@@ -187,21 +193,37 @@ function renderStep(step: Step, blockIndex: number, stepIndex: number | null): H
     controls.append(numberInput, unitSelect);
   }
 
-  const lapButton = document.createElement('button');
-  lapButton.type = 'button';
-  lapButton.className = 'btn btn--quiet tap';
-  lapButton.style.width = 'auto';
-  lapButton.style.marginTop = '0';
-  lapButton.textContent = step.untilLapPress ? 'Use a set duration' : 'Until lap press';
-  lapButton.addEventListener('click', () => {
-    step.untilLapPress = !step.untilLapPress;
+  // A two-option segmented control rather than a button whose label flips.
+  // Showing both states side by side, with the current one marked, makes it
+  // read as a choice instead of an action.
+  const toggle = document.createElement('div');
+  toggle.className = 'toggle';
+  toggle.setAttribute('role', 'group');
+  toggle.setAttribute('aria-label', 'How this step ends');
+
+  const setEnding = (lap: boolean) => {
+    if (step.untilLapPress === lap) return;
+    step.untilLapPress = lap;
     // Intervals.icu still needs a placeholder alongside the lap-press flag.
-    if (step.untilLapPress && step.duration.kind === 'time') {
+    if (lap && step.duration.kind === 'time') {
       step.duration = { kind: 'distance', metres: 2000 };
     }
     acknowledge(key);
-  });
-  controls.append(lapButton);
+  };
+
+  for (const option of [
+    { lap: false, label: 'Set duration' },
+    { lap: true, label: 'Until lap press' },
+  ]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'toggle__option';
+    button.textContent = option.label;
+    button.setAttribute('aria-pressed', String(step.untilLapPress === option.lap));
+    button.addEventListener('click', () => setEnding(option.lap));
+    toggle.append(button);
+  }
+  controls.append(toggle);
 
   item.append(controls);
 
@@ -215,8 +237,8 @@ function renderStep(step: Step, blockIndex: number, stepIndex: number | null): H
   if (unacknowledged) {
     const ack = document.createElement('button');
     ack.type = 'button';
-    ack.className = 'ack tap';
-    ack.innerHTML = '<span class="ack__mark" aria-hidden="true">&#9888;</span> This was a guess — confirm it';
+    ack.className = 'ack';
+    ack.textContent = 'Guessed. Confirm';
     ack.addEventListener('click', () => acknowledge(key));
     item.append(ack);
   }
@@ -294,6 +316,10 @@ function render(): void {
   const notice = el('send-notice');
   const sendButton = el<HTMLButtonElement>('send');
 
+  // Button label and enabled state are derived here on every render, so they can
+  // never be left stranded by a view change part-way through a send.
+  sendButton.textContent = sending ? 'Sending…' : 'Send to Garmin ▸';
+
   if (globalErrors.length > 0) {
     notice.textContent = globalErrors[0]!.message;
     notice.className = 'notice error';
@@ -308,7 +334,7 @@ function render(): void {
   } else {
     notice.textContent = 'Everything is confirmed.';
     notice.className = 'notice';
-    sendButton.disabled = false;
+    sendButton.disabled = sending;
   }
 }
 
@@ -376,14 +402,21 @@ async function convert(): Promise<void> {
   }
 }
 
-async function send(): Promise<void> {
-  if (!workout) return;
+function failSend(message: string): void {
+  const panel = el('send-error');
+  panel.textContent = message;
+  panel.classList.remove('hidden');
+  sending = false;
+  render();
+}
 
-  const button = el<HTMLButtonElement>('send');
+async function send(): Promise<void> {
+  if (!workout || sending) return;
+
   const date = el<HTMLInputElement>('date').value;
-  button.disabled = true;
-  button.textContent = 'Sending…';
   el('send-error').classList.add('hidden');
+  sending = true;
+  render();
 
   try {
     const response = await fetch('/api/send', {
@@ -391,14 +424,10 @@ async function send(): Promise<void> {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ workout, date }),
     });
-    const payload = (await response.json()) as { error?: string; date?: string };
+    const payload = (await response.json()) as { error?: string };
 
     if (!response.ok) {
-      const panel = el('send-error');
-      panel.textContent = payload.error ?? 'That did not send. Try again.';
-      panel.classList.remove('hidden');
-      button.disabled = false;
-      button.textContent = 'Send to Garmin';
+      failSend(payload.error ?? 'That did not send. Try again.');
       return;
     }
 
@@ -407,13 +436,95 @@ async function send(): Promise<void> {
     });
     el('success-line').textContent =
       `On the calendar for ${when}. Open Garmin Connect on your phone to sync it to your watch.`;
+    sending = false;
     show('success');
+    render();
   } catch {
-    const panel = el('send-error');
-    panel.textContent = 'Could not reach the server. Check your connection and try again.';
-    panel.classList.remove('hidden');
-    button.disabled = false;
-    button.textContent = 'Send to Garmin';
+    failSend('Could not reach the server. Check your connection and try again.');
+  }
+}
+
+/* ---- Clearing the Intervals.icu calendar --------------------------------- */
+
+type ClearScope = 'future' | 'past' | 'all';
+
+const SCOPE_LABEL: Record<ClearScope, string> = {
+  future: 'upcoming workouts',
+  past: 'past workouts',
+  all: 'all workouts',
+};
+
+let pendingScope: ClearScope | null = null;
+
+function clearStatus(message: string, isError = false): void {
+  const node = el('clear-status');
+  node.textContent = message;
+  node.className = isError ? 'notice error' : 'notice';
+}
+
+async function askToClear(scope: ClearScope): Promise<void> {
+  pendingScope = null;
+  el('clear-confirm').classList.add('hidden');
+  clearStatus('Counting…');
+
+  try {
+    const response = await fetch(`/api/clear?scope=${scope}`);
+    const payload = (await response.json()) as { count?: number; error?: string };
+
+    if (!response.ok) {
+      clearStatus(payload.error ?? 'Could not reach Intervals.icu.', true);
+      return;
+    }
+
+    if (!payload.count) {
+      clearStatus(`No ${SCOPE_LABEL[scope]} to remove.`);
+      return;
+    }
+
+    pendingScope = scope;
+    el('clear-confirm-text').textContent =
+      `Delete ${payload.count} ${payload.count === 1 ? 'workout' : 'workouts'} from Intervals.icu? This cannot be undone.`;
+    el('clear-confirm').classList.remove('hidden');
+    clearStatus('');
+  } catch {
+    clearStatus('Could not reach the server.', true);
+  }
+}
+
+async function doClear(): Promise<void> {
+  if (!pendingScope) return;
+  const scope = pendingScope;
+
+  el('clear-confirm').classList.add('hidden');
+  pendingScope = null;
+  clearStatus('Deleting…');
+
+  try {
+    const response = await fetch('/api/clear', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scope, confirm: scope }),
+    });
+    const payload = (await response.json()) as {
+      deleted?: number;
+      failed?: number;
+      error?: string;
+    };
+
+    if (!response.ok) {
+      clearStatus(payload.error ?? 'Nothing was deleted.', true);
+      return;
+    }
+
+    const failed = payload.failed ?? 0;
+    clearStatus(
+      failed > 0
+        ? `Removed ${payload.deleted}. ${failed} could not be removed.`
+        : `Removed ${payload.deleted}.`,
+      failed > 0,
+    );
+  } catch {
+    clearStatus('Could not reach the server.', true);
   }
 }
 
@@ -426,13 +537,41 @@ export function init(): void {
   });
 
   el('back').addEventListener('click', () => {
+    // Leaving mid-send abandons the request; clear the flag so returning does
+    // not find the button stuck.
+    sending = false;
     show('paste');
   });
 
   el('again').addEventListener('click', () => {
     el<HTMLTextAreaElement>('paste').value = '';
     workout = null;
+    sending = false;
     show('paste');
+  });
+
+  el('clear-toggle').addEventListener('click', () => {
+    const panel = el('clear-body');
+    const hidden = panel.classList.toggle('hidden');
+    el('clear-toggle').textContent = hidden
+      ? 'Clear Intervals.icu workouts'
+      : 'Hide';
+    if (hidden) {
+      pendingScope = null;
+      el('clear-confirm').classList.add('hidden');
+      clearStatus('');
+    }
+  });
+
+  for (const scope of ['future', 'past', 'all'] as ClearScope[]) {
+    el(`clear-${scope}`).addEventListener('click', () => void askToClear(scope));
+  }
+
+  el('clear-go').addEventListener('click', () => void doClear());
+  el('clear-cancel').addEventListener('click', () => {
+    pendingScope = null;
+    el('clear-confirm').classList.add('hidden');
+    clearStatus('');
   });
 
   el('original-toggle').addEventListener('click', () => {
