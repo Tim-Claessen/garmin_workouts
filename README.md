@@ -210,8 +210,6 @@ captured payloads.
 
 ### Security and access
 
-- [ ] **Rotate `ICU_API_KEY`.** The original is still live and has appeared in a
-      chat transcript.
 - [ ] Confirm a non-allowlisted email is actually rejected by Access.
 - [ ] Add Zoe's address to the Access policy.
 - [ ] Delete the leftover test events from the Intervals.icu calendar
