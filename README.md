@@ -1,6 +1,6 @@
-# Garmin workout builder
+# Sessionise
 
-Paste a running session as text, check what the parser made of it, and send it to
+Enter a running session as text, check what the parser made of it, and send it to
 a Garmin watch. One session at a time, roughly weekly. No accounts, no history,
 no database.
 
@@ -35,6 +35,42 @@ review screen ──► every inferred value acknowledged by hand
 | [src/lib/to-plain-english.ts](src/lib/to-plain-english.ts) | The restatement. Never model-generated |
 | [src/lib/intervals-admin.ts](src/lib/intervals-admin.ts) | Bulk removal of planned workouts |
 | [src/client/review.ts](src/client/review.ts) | The review screen |
+
+## Look and feel
+
+[docs/style-guide.md](docs/style-guide.md) is the source of truth for colour,
+type and spacing. The stylesheet is deliberately in two files:
+
+| File | Holds |
+| --- | --- |
+| [src/styles/tokens.css](src/styles/tokens.css) | The design export — tokens and the named classes. Replaced wholesale, so it stays identical to the export |
+| [src/styles/app.css](src/styles/app.css) | Composition above the tokens — step-row internals, the editing sheet, the spine, the stat row |
+
+The one rule that carries the design: **colour encodes trust, not hierarchy.**
+`--infer` (amber) means "the model made this up and you haven't agreed to it
+yet", and it appears nowhere else — not on hover, not on focus, not as an accent.
+
+The review screen renders the workout as a **table of steps**, not a column of
+forms, and editing happens in one reusable sheet. That is what keeps fifteen
+steps checkable in a single pass, which is the only way "check every step" is a
+real instruction rather than a request to scroll.
+
+### Icons
+
+| Asset | File | Use |
+| --- | --- | --- |
+| Icon | [public/favicon.svg](public/favicon.svg) | Browser tab, PWA |
+| Icon (raster) | `public/favicon-32.png`, `public/favicon-192.png` | Fallback, Android |
+| Icon (iOS) | `public/apple-touch-icon.png` | Square, no rounding — iOS masks it |
+| Mono | [public/icon-mono.svg](public/icon-mono.svg) | Light backgrounds, Access login page |
+| Lockup | [public/logo.svg](public/logo.svg) | Access login page header |
+
+The mark is three horizontal bars of unequal length in a rounded square — a
+session's steps, nothing more. It is three `<rect>`s and reads at 16px.
+
+`icon-mono.svg` and `logo.svg` are **not referenced by any code**. They exist for
+the Cloudflare Access login page, which is branded in the dashboard rather than
+in this repo — see [Tidying the login page](#tidying-the-login-page).
 
 ## Step cues — your words on the watch
 
@@ -148,7 +184,18 @@ The Access sign-in page can carry a name, logo, colours and header text:
 Manage.** There is a live preview, and the change applies to every Access
 application on the account.
 
-It is branding only — the page structure and the OTP flow are fixed.
+The branding assets are [public/logo.svg](public/logo.svg) for the header lockup
+and [public/icon-mono.svg](public/icon-mono.svg) for the light background the
+sign-in page uses.
+
+**They cannot be served from this app.** Access renders its login page *before*
+the request reaches the Worker, and every path on `run.timclaessen.com` is behind
+the same Access policy — so a logo URL pointing back here would itself demand a
+login. Host the file somewhere public, or add an Access bypass policy for the two
+asset paths. The copies in `public/` are the masters, not the served location.
+
+It is branding only — the page structure and the OTP flow are fixed, and this is
+dashboard configuration, not code. Nothing in this repo sets it.
 
 ## Running locally
 
@@ -270,7 +317,10 @@ captured payloads.
 - [ ] Fixture 05 fails: "finish with an easy 10" reads as a distance rather than
       10 minutes. Genuinely ambiguous in the source text — left failing on
       purpose rather than tuned away.
-- [ ] No accessibility pass beyond focus rings, 44px targets and contrast.
+- [ ] No accessibility pass with a real screen reader. The redesign added focus
+      rings, 44px targets, a live region on the confirmation banner, per-row
+      `aria-label`s and focus management in the editing sheet, but none of it has
+      been driven by anything other than a keyboard.
 
 ### If it gets more use
 

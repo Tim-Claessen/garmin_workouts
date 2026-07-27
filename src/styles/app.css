@@ -1,0 +1,777 @@
+/*
+ * Sessionise — composition.
+ *
+ * tokens.css is the design handoff and is kept byte-identical to the export, so
+ * it can be replaced wholesale when the style guide changes. This file holds the
+ * layer above it: the internals of the step row, the editing sheet, the spine
+ * and the stat row — structure the handoff describes but does not ship CSS for.
+ *
+ * Values here come from docs/style-guide.md via the tokens. Nothing invents a
+ * colour, and --infer is not used anywhere in this file except where a value is
+ * inferred and unconfirmed.
+ */
+
+/* ---- App bar ------------------------------------------------------------- */
+
+.appbar__right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.wordmark svg {
+  display: block;
+}
+
+.chip select {
+  min-height: 0;
+  height: 26px;
+  padding: 0 var(--space-0);
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+/* The signed-in identity is a footnote, not a feature. */
+.identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.identity a {
+  color: var(--muted);
+}
+
+.identity a:hover {
+  color: var(--text);
+}
+
+@media (max-width: 599px) {
+  .appbar .identity {
+    display: none;
+  }
+}
+
+.appbar {
+  padding: 0 var(--space-3);
+  gap: var(--space-3);
+}
+
+@media (min-width: 600px) {
+  .appbar {
+    padding: 0 var(--space-5);
+  }
+}
+
+@media (max-width: 959px) {
+  .appbar {
+    height: var(--bar-mobile);
+  }
+}
+
+/* ---- Spine --------------------------------------------------------------- */
+
+/*
+ * Paste → Check every step → Send. Present so the review screen reads as the
+ * middle of something rather than an interruption.
+ */
+
+.spine {
+  gap: 0;
+  overflow-x: auto;
+  padding: 14px var(--space-3);
+  font-size: var(--text-sm);
+}
+
+@media (min-width: 600px) {
+  .spine {
+    padding: 18px var(--space-5);
+  }
+}
+
+.spine__step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+.spine__step[aria-current='step'] {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.spine__num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  font-family: var(--font-data);
+  font-weight: 700;
+  font-size: var(--text-xs);
+}
+
+.spine__step--done .spine__num {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.spine__step[aria-current='step'] .spine__num {
+  border-color: var(--text);
+  color: var(--text);
+}
+
+@media (max-width: 599px) {
+  .spine__rule {
+    flex-basis: 24px;
+    margin: 0 var(--space-1);
+  }
+}
+
+/* ---- Headings and shared bits -------------------------------------------- */
+
+h1 {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-data);
+  font-weight: 700;
+  font-size: var(--text-xl);
+  letter-spacing: 0.01em;
+}
+
+@media (min-width: 600px) {
+  h1 {
+    font-size: var(--text-2xl);
+  }
+}
+
+h2 {
+  margin: 0;
+  font-family: var(--font-data);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: 0.01em;
+}
+
+.lede {
+  margin: 0 0 var(--space-4);
+  color: var(--muted);
+}
+
+.lede--tight {
+  margin: 0;
+}
+
+.spaced {
+  margin-top: var(--space-2);
+}
+
+.stack-v {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.link {
+  background: none;
+  border: none;
+  padding: 0;
+  min-height: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.link:hover {
+  color: var(--text);
+}
+
+/* ---- Paste view ---------------------------------------------------------- */
+
+.card--paste {
+  overflow: hidden;
+}
+
+.card--paste textarea {
+  display: block;
+  border-radius: 12px 12px 0 0;
+}
+
+.card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.card__foot .hint {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 599px) {
+  .card__foot .hint {
+    display: none;
+  }
+
+  .card__foot .btn {
+    width: 100%;
+  }
+}
+
+/* ---- Review: name and derived stats -------------------------------------- */
+
+.namebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0);
+}
+
+#workout-name {
+  width: 100%;
+  min-height: 0;
+  font-size: var(--text-xl);
+}
+
+@media (min-width: 600px) {
+  #workout-name {
+    font-size: 30px;
+  }
+}
+
+/*
+ * Derived on every render from the workout itself — never stored, for the same
+ * reason the restatement is never model-generated.
+ */
+.stats {
+  display: flex;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  margin: var(--space-4) 0;
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat__value {
+  font-family: var(--font-data);
+  font-weight: 600;
+  font-size: var(--text-md);
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Review: the confirmation banner ------------------------------------- */
+
+.banner__text {
+  flex: 1 1 auto;
+}
+
+.banner__note {
+  display: block;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.banner--infer .dot {
+  background: var(--infer);
+}
+
+.banner--ready .dot {
+  background: var(--accent);
+}
+
+.banner--error .dot {
+  background: var(--danger);
+}
+
+#send-notice.hidden {
+  display: none;
+}
+
+/* ---- Review: the step table ---------------------------------------------- */
+
+.steps {
+  overflow: hidden;
+}
+
+.steps__head {
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+#stack {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#stack ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step__index {
+  color: var(--muted);
+  font-family: var(--font-data);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.step__main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.step__label {
+  font-weight: 500;
+}
+
+/* The athlete's own wording, carried through to the watch. Never digits. */
+.step__cue {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/*
+ * tokens.css sets both `color` and `background` to --infer on the value and the
+ * marker of an unconfirmed row. That is right for the marker, which is a solid
+ * 3px bar, but on the value it paints amber text onto an amber block — the one
+ * number the review screen most needs legible. Corrected here rather than in
+ * tokens.css so that file stays identical to the design export.
+ */
+.step[data-inferred='true'] .step__value {
+  background: none;
+}
+
+.step__ends {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.step__edit {
+  min-height: 0;
+  height: 32px;
+  padding: 0 var(--space-2);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.step__edit:hover {
+  border-color: var(--text);
+  color: var(--text);
+}
+
+/* The unconfirmed row's explanation and its two buttons, across the full row. */
+.step__guess {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding-top: var(--space-1);
+}
+
+.step__guess p {
+  flex: 1 1 14rem;
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.step__flag {
+  flex: none;
+  color: var(--infer);
+}
+
+.step__error {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
+.repeat__error {
+  padding: 0 var(--space-3) var(--space-2);
+}
+
+/* Repeat group: a count pill and its steps, indented once. */
+.repeat__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  flex-wrap: wrap;
+}
+
+.repeat__head .label,
+.repeat__summary {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.repeat__summary {
+  margin-left: auto;
+}
+
+.repeat__count input {
+  width: 3.5rem;
+  min-height: 0;
+  height: 26px;
+  padding: 0 2px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
+
+.repeat__inner .step {
+  padding-left: var(--space-5);
+}
+
+@media (max-width: 959px) {
+  .repeat__inner .step {
+    margin-left: var(--space-3);
+  }
+}
+
+/* Below the breakpoint each row is a card: label and amount, then the rest. */
+@media (max-width: 959px) {
+  .steps__head {
+    display: none;
+  }
+
+  .steps,
+  .repeat__inner {
+    --cols: 1fr auto;
+  }
+
+  .step {
+    grid-template-columns: var(--cols);
+    align-items: start;
+    row-gap: var(--space-1);
+    padding: var(--space-3);
+  }
+
+  .step__index {
+    display: none;
+  }
+
+  .step__value {
+    font-size: var(--text-lg);
+    text-align: right;
+  }
+
+  .step__ends {
+    grid-column: 1 / -1;
+  }
+}
+
+/* ---- Review: action bar and the outgoing payload ------------------------- */
+
+.actionbar__date {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.actionbar__date input {
+  min-height: var(--tap);
+}
+
+@media (max-width: 959px) {
+  /*
+   * Fifteen steps push Send off the screen, so on phones it pins to the foot of
+   * the view where a thumb already is.
+   */
+  .actionbar {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    margin: var(--space-3) calc(var(--space-3) * -1) 0;
+  }
+
+  .actionbar__date {
+    justify-content: space-between;
+  }
+}
+
+.original__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.original__section + .original__section {
+  border-top: 1px solid var(--line);
+}
+
+/* What actually leaves, shown before it leaves. Read-only, always. */
+.payload {
+  margin: 0;
+  padding: var(--space-3);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.7;
+}
+
+.original .notice {
+  padding: 0 var(--space-3) var(--space-3);
+  margin: 0;
+}
+
+@media (max-width: 959px) {
+  .original {
+    margin-top: var(--space-3);
+  }
+}
+
+/* ---- The editing sheet --------------------------------------------------- */
+
+/*
+ * Editing moved out of the row and into one reusable sheet, so the review page
+ * stays a table you can read rather than a wall of form controls. The fields are
+ * the same constrained set as before — no free text anywhere but the workout
+ * name — and committing a change still counts as acknowledging the step.
+ */
+
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(6, 9, 11, 0.72);
+}
+
+.sheet.hidden {
+  display: none;
+}
+
+.sheet__panel {
+  width: 100%;
+  max-width: 30rem;
+  max-height: 90vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px 12px 0 0;
+}
+
+@media (min-width: 600px) {
+  .sheet {
+    align-items: center;
+  }
+
+  .sheet__panel {
+    border-radius: 12px;
+  }
+}
+
+.sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+}
+
+.sheet__foot {
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.sheet__foot .btn {
+  flex: 1;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.field__controls {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.field__controls select,
+.field__controls input {
+  flex: 1;
+}
+
+/*
+ * A two-option segmented control rather than a button whose label flips.
+ * Showing both states side by side, with the current one marked, makes it read
+ * as a choice instead of an action.
+ */
+.toggle {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.toggle__option {
+  flex: 1;
+  background: var(--raised);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.toggle__option[aria-pressed='true'] {
+  background: var(--accent-wash);
+  border-color: var(--accent-edge);
+  color: var(--text);
+}
+
+/* ---- Clearing the calendar ----------------------------------------------- */
+
+.clear {
+  margin-top: var(--space-6);
+}
+
+.clear__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+#clear-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+}
+
+.scopes {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.scopes .btn {
+  flex: 1;
+  height: var(--tap);
+  padding: 0 var(--space-2);
+}
+
+/* ---- Won't send ---------------------------------------------------------- */
+
+.card--error {
+  border-color: var(--danger-edge);
+  background: var(--danger-wash);
+}
+
+.card--error h2 {
+  color: var(--danger);
+  font-size: var(--text-md);
+}
+
+/* ---- Success ------------------------------------------------------------- */
+
+.success {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  background: var(--accent-wash);
+  border: 1px solid var(--accent-edge);
+  color: var(--accent);
+  font-size: var(--text-md);
+}
+
+.summary {
+  padding: var(--space-3) var(--space-4);
+  width: 100%;
+}
+
+.summary__name {
+  font-family: var(--font-data);
+  font-weight: 700;
+  font-size: var(--text-md);
+  letter-spacing: 0.01em;
+}
+
+.summary__meta {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/*
+ * Re-asserted last so that hiding a view always wins over the display value its
+ * own class sets. tokens.css declares .hidden before these rules.
+ */
+.hidden {
+  display: none;
+}

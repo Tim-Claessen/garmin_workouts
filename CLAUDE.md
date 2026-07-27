@@ -21,6 +21,9 @@ from the live API that cannot be derived from first principles.
   [docs/style-guide.md](docs/style-guide.md).** `--infer` is reserved exclusively
   for AI-inferred values awaiting confirmation and appears nowhere else — not on
   hover, not on focus, not as an accent.
+- **The app is called Sessionise.** The `localStorage` key stays
+  `garmin-builder:athlete` — renaming it would silently forget everyone's athlete
+  choice and default them to someone else's calendar.
 - **One page. No database. No accounts. No history.**
 - **Step cues carry the athlete's wording, never digits.** `sanitiseCue()` strips
   every number before a note reaches the description. A cue is worth having, but
@@ -52,6 +55,16 @@ from the live API that cannot be derived from first principles.
 - Client state that gates a button (`sending`) lives in a variable and is applied
   in `render()`, never written straight onto the DOM node. Writing it directly is
   what left the send button stranded on "Sending…" after a view change.
+- The stylesheet is two files on purpose. `tokens.css` is the **design export**
+  and is kept identical to it, so a new export can replace it wholesale;
+  `app.css` is composition above the tokens and invents no values of its own.
+  Put new component CSS in `app.css`.
+- Editing a step happens in **one reusable sheet**, not inline on the row. The
+  row is a table row so fifteen steps can be read in one pass; putting controls
+  back on it is what made the old review screen a wall of forms. Committing an
+  edit still calls `acknowledge()` — changing a value is an act of review.
+- The step numbering in `review.ts` counts **repeats expanded**, and `validate.ts`
+  never mentions a step number: only the client knows a step's position.
 
 ## Gotchas
 

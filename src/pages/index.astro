@@ -1,5 +1,6 @@
 ---
 import '../styles/tokens.css';
+import '../styles/app.css';
 
 export const prerender = false;
 
@@ -12,59 +13,121 @@ const email = Astro.locals.accessEmail;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <title>Garmin workout builder</title>
+    <title>Sessionise</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0C1013" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&family=Inter:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Archivo+Narrow:wght@500;600;700&display=swap"
     />
   </head>
   <body>
-    <main class="shell">
-      <!-- Paste -->
-      <section id="view-paste">
-        <h1>Garmin workout builder</h1>
-        <p class="lede">Paste this week's session. You'll get to check it before anything is sent.</p>
+    <header class="appbar">
+      <span class="wordmark">
+        {/* Three bars of unequal length — a session's steps. Inline so the app
+            bar needs no second request to render its own name. */}
+        <svg width="24" height="24" viewBox="0 0 44 44" aria-hidden="true">
+          <rect width="44" height="44" rx="11" fill="#0BB5DD"></rect>
+          <rect x="11" y="12" width="22" height="4" rx="2" fill="#04222B"></rect>
+          <rect x="11" y="20" width="12" height="4" rx="2" fill="#04222B"></rect>
+          <rect x="11" y="28" width="18" height="4" rx="2" fill="#04222B"></rect>
+        </svg>
+        Sessionise
+      </span>
 
-        <div id="athlete-row" class="panel athlete hidden">
-          <label for="athlete">Send to</label>
+      <div class="appbar__right">
+        {/* Hidden with fewer than two athletes: a menu of one is not a choice. */}
+        <div id="athlete-row" class="chip hidden">
+          <span id="athlete-avatar" class="avatar" aria-hidden="true"></span>
+          <label class="sr-only" for="athlete">Send to</label>
           <select id="athlete"></select>
         </div>
 
-        <label class="sr-only" for="paste">Session text</label>
-        <textarea
-          id="paste"
-          placeholder={'Warm up 10 min\n6 x 800m with 90 sec recovery\nCool down 10 min'}
-        ></textarea>
+        <p class="identity">
+          <span>{email ?? ''}</span>
+          {/*
+            Clears the Cloudflare Access cookie. This is how you switch to a
+            different email — Access has no account switcher, so signing out and
+            back in with the other address is the mechanism. Shown regardless of
+            whether the identity is known, so it does not disappear if JWT
+            verification is off.
+          */}
+          <a href="/cdn-cgi/access/logout">Sign out</a>
+        </p>
+      </div>
+    </header>
 
-        <p id="parse-error" class="panel error-panel hidden"></p>
+    <nav id="spine" class="spine hidden" aria-label="Progress">
+      <span class="spine__step spine__step--done">
+        <span class="spine__num" aria-hidden="true">✓</span>
+        Paste
+      </span>
+      <span class="spine__rule spine__rule--done"></span>
+      <span class="spine__step" aria-current="step">
+        <span class="spine__num" aria-hidden="true">2</span>
+        Check every step
+      </span>
+      <span class="spine__rule"></span>
+      <span class="spine__step">
+        <span class="spine__num" aria-hidden="true">3</span>
+        Send
+      </span>
+    </nav>
 
-        <button id="convert" class="btn" type="button">Convert</button>
+    <main class="shell">
+      <!-- Paste -->
+      <section id="view-paste">
+        <h1>Session Plan</h1>
+        <p class="lede">
+          Enter what you want to do. You'll check every step before anything leaves.
+        </p>
+
+        <div class="card card--paste">
+          <label class="sr-only" for="paste">Session text</label>
+          <textarea
+            id="paste"
+            placeholder={'15 min warm up\n6 x 800m threshold, jog back\ncool down until lap press'}
+          ></textarea>
+          <div class="card__foot">
+            <span class="hint">Plain text. Any format.</span>
+            <button id="convert" class="btn" type="button">Read it →</button>
+          </div>
+        </div>
+
+        <p id="parse-error" class="banner banner--error spaced hidden"></p>
 
         <!-- Destructive, so kept collapsed and out of the main flow -->
-        <div class="panel danger-zone">
-          <button id="clear-toggle" class="btn btn--quiet" type="button">
-            Clear Intervals.icu workouts
-          </button>
+        <div class="card card--pad clear">
+          <div class="clear__head">
+            <button id="clear-toggle" class="link" type="button">
+              Tidy up the calendar
+            </button>
+            <span class="identity">
+              <span>{email ? `Signed in as ${email}` : ''}</span>
+            </span>
+          </div>
 
           <div id="clear-body" class="hidden">
             <p class="notice">
               Removes planned workouts from the Intervals.icu calendar. Recorded
-              activities and anything that is not a workout are left alone. This
-              cannot be undone, and it will not remove workouts already synced to
-              the watch.
+              runs are never touched, and neither is anything this app did not
+              create. This can't be undone, and it will not remove workouts
+              already synced to the watch.
             </p>
 
-            <div class="controls">
+            <div class="scopes">
               <button id="clear-future" class="btn btn--quiet" type="button">Upcoming</button>
               <button id="clear-past" class="btn btn--quiet" type="button">Past</button>
-              <button id="clear-all" class="btn btn--quiet" type="button">Everything</button>
+              <button id="clear-all" class="btn btn--quiet" type="button">All</button>
             </div>
 
             <div id="clear-confirm" class="hidden">
               <p id="clear-confirm-text" class="notice error"></p>
-              <div class="controls">
+              <div class="row">
                 <button id="clear-go" class="btn btn--danger" type="button">Delete them</button>
                 <button id="clear-cancel" class="btn btn--quiet" type="button">Cancel</button>
               </div>
@@ -76,59 +139,143 @@ const email = Astro.locals.accessEmail;
       </section>
 
       <!-- Review -->
-      <section id="view-review" class="hidden">
-        <div class="panel">
-          <label class="sr-only" for="workout-name">Workout name</label>
-          <input id="workout-name" type="text" style="width:100%" />
-        </div>
+      <section id="view-review" class="hidden stack-v">
+        <div class="card card--pad">
+          <div class="namebar">
+            <label class="label" for="workout-name">Workout name</label>
+            <input id="workout-name" type="text" />
+          </div>
 
-        <div class="panel">
+          <!-- Derived on every render from the workout, never stored -->
+          <div class="stats">
+            <div class="stat">
+              <span class="label">Steps</span>
+              <span id="stat-steps" class="stat__value"></span>
+            </div>
+            <div class="stat">
+              <span class="label">Work</span>
+              <span id="stat-work" class="stat__value"></span>
+            </div>
+            <div class="stat">
+              <span class="label">Planned</span>
+              <span id="stat-planned" class="stat__value"></span>
+            </div>
+          </div>
+
           <p id="restatement" class="restatement"></p>
+          <p class="notice">This sentence is built from the data, not the model.</p>
         </div>
 
-        <ul id="stack" class="stack"></ul>
+        <div id="send-notice" class="banner" aria-live="polite"></div>
 
-        <div class="panel">
-          <label for="date">Date</label>
-          <input id="date" type="date" style="width:100%; margin-top:8px" />
-          <p id="send-notice" class="notice"></p>
-          <p id="send-error" class="panel error-panel hidden"></p>
-          <button id="send" class="btn" type="button" disabled>Send to Garmin ▸</button>
-          <button id="back" class="btn btn--quiet" type="button">Back to the text</button>
+        <div id="send-error" class="card card--pad card--error hidden">
+          <h2>Won't send</h2>
+          <p id="send-error-text" class="notice spaced"></p>
         </div>
+
+        <div class="card steps">
+          <div class="steps__head" aria-hidden="true">
+            <span>#</span>
+            <span>Step</span>
+            <span>Amount</span>
+            <span>Ends</span>
+          </div>
+          <ul id="stack"></ul>
+        </div>
+
+        <div class="actionbar">
+          <button id="back" class="link" type="button">← Back to text</button>
+          <div class="actionbar__date">
+            <label class="label" for="date">Do it on</label>
+            <input id="date" type="date" />
+          </div>
+          <button id="send" class="btn" type="button" disabled>Send to watch</button>
+        </div>
+
+        <!-- What went in and what goes out: alongside on desktop, toggled below -->
+        <aside id="original" class="original card hidden">
+          <div class="original__section">
+            <div class="original__head">
+              <span class="label">What you entered</span>
+              <button id="original-toggle" class="link original__toggle" type="button">
+                Show
+              </button>
+            </div>
+            <div id="original-body" class="hidden">
+              <pre id="original-text"></pre>
+            </div>
+          </div>
+
+          <div class="original__section">
+            <div class="original__head">
+              <span class="label">Goes out as</span>
+            </div>
+            <pre id="payload" class="payload"></pre>
+            <p class="notice">
+              Distances always go out in km. In Intervals.icu syntax <code>m</code>
+              means minutes.
+            </p>
+          </div>
+        </aside>
       </section>
 
       <!-- Success -->
       <section id="view-success" class="hidden success">
-        <div class="panel">
-          <h2>Sent</h2>
-          <p id="success-line"></p>
+        <span class="tick" aria-hidden="true">✓</span>
+        <h2 id="success-line"></h2>
+        <p class="lede lede--tight">Open Garmin Connect to sync it to the watch.</p>
+
+        <div class="card summary">
+          <div id="success-name" class="summary__name"></div>
+          <div id="success-meta" class="summary__meta"></div>
         </div>
+
         <button id="again" class="btn btn--quiet" type="button">Build another</button>
       </section>
-
-      <!-- The original text, alongside on desktop and behind a toggle on mobile -->
-      <aside id="original" class="original panel hidden">
-        <button id="original-toggle" class="btn btn--quiet original__toggle" type="button">
-          Show original
-        </button>
-        <div id="original-body" class="hidden">
-          <pre id="original-text"></pre>
-        </div>
-      </aside>
-
-      <p class="notice signed-in">
-        <span>{email ? `Signed in as ${email}` : ''}</span>
-        {/*
-          Clears the Cloudflare Access cookie. This is how you switch to a
-          different email — Access has no account switcher, so signing out and
-          back in with the other address is the mechanism. Shown regardless of
-          whether the identity is known, so it does not disappear if JWT
-          verification is off.
-        */}
-        <a href="/cdn-cgi/access/logout">Sign out</a>
-      </p>
     </main>
+
+    <!--
+      One sheet, reused for whichever step is being edited. Every field is
+      constrained — no free text anywhere except the workout name — so a
+      mis-typed unit cannot reach the watch.
+    -->
+    <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <div class="sheet__panel">
+        <div class="sheet__head">
+          <h2 id="sheet-title">Edit step</h2>
+          <button id="sheet-close" class="link" type="button">Close</button>
+        </div>
+
+        <div class="sheet__body">
+          <div class="field">
+            <label class="label" for="sheet-type">Step</label>
+            <select id="sheet-type"></select>
+          </div>
+
+          <div class="field">
+            <span class="label" id="sheet-ends-label">How it ends</span>
+            <div class="toggle" role="group" aria-labelledby="sheet-ends-label">
+              <button id="sheet-ends-set" class="toggle__option" type="button">Set duration</button>
+              <button id="sheet-ends-lap" class="toggle__option" type="button">Until lap press</button>
+            </div>
+          </div>
+
+          <div class="field" id="sheet-amount">
+            <label class="label" for="sheet-value">Amount</label>
+            <div class="field__controls">
+              <input id="sheet-value" type="number" min="1" step="any" />
+              <label class="sr-only" for="sheet-unit">Unit</label>
+              <select id="sheet-unit"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="sheet__foot">
+          <button id="sheet-cancel" class="btn btn--quiet" type="button">Cancel</button>
+          <button id="sheet-save" class="btn" type="button">Save</button>
+        </div>
+      </div>
+    </div>
 
     <script>
       import { init } from '../client/review';
