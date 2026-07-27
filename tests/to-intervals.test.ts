@@ -111,6 +111,48 @@ describe('sanitiseCueInput', () => {
   });
 });
 
+/**
+ * Recover and rest reached the watch labelled as runs. Warm-up and cool-down get
+ * their type from the section header, but a recovery inside a repeat has no
+ * header of its own, so a bare `- 90s` was indistinguishable from work.
+ * `intensity=` is the FIT step-intensity field Garmin reads for the label.
+ */
+describe('step intensity', () => {
+  it('marks recover and rest so Garmin does not read them as work', () => {
+    expect(formatStep(timeStep('recover', 90))).toBe('- 90s intensity=recovery');
+    expect(formatStep(timeStep('rest', 120))).toBe('- 2m intensity=rest');
+  });
+
+  it('leaves the types that already arrive correctly alone', () => {
+    // run is Garmin's default, and warmup/cooldown come from their headers —
+    // a route captured from a real synced workout. Nothing to gain by changing it.
+    expect(formatStep(distanceStep('run', 800))).toBe('- 0.8km');
+    expect(formatStep(lapPressStep('warmup'))).toBe('- Press lap 2km');
+    expect(formatStep(lapPressStep('cooldown'))).toBe('- Press lap 2km');
+  });
+
+  it('puts the attribute after the duration, never before it', () => {
+    // Anything before the first duration is read as the cue, so an attribute
+    // placed there would show up as the words "intensity=rest" on the watch.
+    const step = timeStep('recover', 90, { note: 'jog back' });
+    expect(formatStep(step)).toBe('- jog back 90s intensity=recovery');
+    expect(formatStep(step).indexOf('90s')).toBeLessThan(
+      formatStep(step).indexOf('intensity='),
+    );
+  });
+
+  it('still marks the step when it also ends on a lap press', () => {
+    const step = timeStep('recover', 90, { untilLapPress: true });
+    expect(formatStep(step)).toBe('- Press lap 90s intensity=recovery');
+  });
+
+  it('introduces no digits, so the unit trap stays shut', () => {
+    for (const step of [timeStep('recover', 90), timeStep('rest', 300)]) {
+      expect(formatStep(step).split('intensity=')[1]).not.toMatch(/[0-9]/);
+    }
+  });
+});
+
 describe('step cues', () => {
   it('places the cue before the duration', () => {
     const step = distanceStep('run', 800, { note: 'threshold' });
@@ -149,8 +191,11 @@ describe('formatTime', () => {
 
 describe('toDescription', () => {
   it('reproduces the verified reference session', () => {
-    // This exact string was confirmed to parse into the workout_doc captured in
-    // docs/intervals-syntax.md, which reached a real watch.
+    // Confirmed against the workout_doc captured in docs/intervals-syntax.md,
+    // which reached a real watch — with one deliberate departure. The recovery
+    // line now carries `intensity=recovery`; on the captured version it was a
+    // bare `- 90s`, and that is exactly why the step arrived on the watch
+    // labelled as a run. See the note in docs/intervals-syntax.md.
     expect(toDescription(referenceWorkout())).toBe(
       [
         'Warmup',
@@ -158,7 +203,7 @@ describe('toDescription', () => {
         '',
         'Main set 6x',
         '- 0.8km',
-        '- 90s',
+        '- 90s intensity=recovery',
         '',
         'Cooldown',
         '- Press lap 2km',
@@ -191,7 +236,9 @@ describe('toDescription', () => {
     expect(description).toContain('\n\nMain set 4x\n');
     // 60s is a whole minute, so it goes out as "1m" — which genuinely does mean
     // one minute here. The trap is only ever a *distance* written with a bare m.
-    expect(description).toMatch(/- 1m\n\nCooldown/);
+    // The recovery carries its step type after the duration; the blank line that
+    // has to close a repeat block still follows it.
+    expect(description).toMatch(/- 1m intensity=recovery\n\nCooldown/);
   });
 
   it('never emits a bare metre duration anywhere in a full workout', () => {

@@ -71,6 +71,29 @@ export function sanitiseCue(note: string | undefined): string {
   return sanitiseCueInput(note).trim();
 }
 
+/**
+ * The FIT step-intensity Garmin uses to label a step on the watch face.
+ *
+ * This is **not** an effort target and does not breach the no-targets rule: it
+ * carries no pace, heart rate, power or percentage, and prescribes nothing. It is
+ * the same classification `step.type` already holds, written in the one vocabulary
+ * Garmin reads. The FIT field accepts `active`, `rest`, `warmup`, `cooldown`,
+ * `recovery`, `interval` and `other`.
+ *
+ * Only recover and rest are listed. Warm-up and cool-down already arrive correctly
+ * through their section headers — that route is captured from a real synced
+ * workout in docs/intervals-syntax.md, and there is nothing to gain by changing a
+ * path already known to work. A `run` step is the default Garmin assumes.
+ *
+ * Recover and rest had no marker of any kind. Inside a repeat there is no header
+ * to carry one, so a recovery emitted as a bare `- 90s` was indistinguishable from
+ * work and reached the watch labelled as a run.
+ */
+const STEP_INTENSITY: Partial<Record<Step['type'], string>> = {
+  recover: 'recovery',
+  rest: 'rest',
+};
+
 export function formatStep(step: Step): string {
   const duration =
     step.duration.kind === 'time'
@@ -82,7 +105,12 @@ export function formatStep(step: Step): string {
   // acts as a placeholder the lap press overrides.
   const lap = step.untilLapPress ? 'Press lap ' : '';
   const cue = sanitiseCue(step.note);
-  return `- ${lap}${cue ? `${cue} ` : ''}${duration}`;
+  // Trailing, after the duration. Anything before the first duration is read as
+  // the step's cue text, so this has to sit at the end or it becomes a label
+  // reading "intensity=rest" on the watch instead of setting the step type.
+  const intensity = STEP_INTENSITY[step.type];
+
+  return `- ${lap}${cue ? `${cue} ` : ''}${duration}${intensity ? ` intensity=${intensity}` : ''}`;
 }
 
 /**

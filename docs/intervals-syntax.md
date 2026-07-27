@@ -102,6 +102,52 @@ The placeholder value does still feed the totals (`distance: 8800` for the worko
 it affects planned-load figures even though it isn't the real duration. Keep placeholders
 plausible rather than minimal.
 
+## Step type: `intensity=` ⚠ not yet confirmed against the live API
+
+Everything else on this page was captured from real responses. **This section was
+not** — it comes from the Intervals.icu forum, and needs one real send to confirm.
+
+Section headers set `warmup: true` / `cooldown: true`, but there is no header for a
+step inside a repeat, so a recovery emitted as a bare `- 90s` carried nothing to
+distinguish it from work. It reached the watch labelled as a run. Headers are
+otherwise only cue text, so `Recovery` and `Rest` headers on top-level steps did
+not set a type either.
+
+The mechanism is a trailing `intensity=` attribute on the step line:
+
+```
+- 90s intensity=recovery
+- 5m intensity=rest
+- 60m intensity=active
+```
+
+Values are the Garmin FIT step-intensity field: `active`, `rest`, `warmup`,
+`cooldown`, `recovery`, `interval`, `other`.
+
+Two things to note:
+
+1. **It goes after the duration.** Anything before the first duration is read as
+   the step's cue, so an attribute placed there becomes the literal text
+   "intensity=rest" on the watch instead of setting the type.
+2. **A target is not required alongside it.** The forum example `60m
+   intensity=active` carries no power, pace or HR, which is what makes this usable
+   here — this app emits no targets by design.
+
+`intensity=` is a step *classification*, not an effort target. It carries no
+number and prescribes nothing, so it does not breach the no-targets rule; it is
+`step.type` written in the vocabulary Garmin reads.
+
+`to-intervals.ts` emits it for `recover` and `rest` only. Warm-up and cool-down
+already arrive correctly via their headers — verified below — and `run` is
+Garmin's default.
+
+**To confirm:** send a session with a recovery inside a repeat, then
+`GET /api/v1/athlete/{id}/events/{eid}` and check the parsed `workout_doc` marks
+that step as recovery rather than work. Delete the check-quote below when done.
+
+> Sources: [Workout Builder — Garmin — Recovery/Rest Interval step](https://forum.intervals.icu/t/workout-builder-garmin-recovery-rest-interval-step/19540),
+> [Different syntax on workout builder](https://forum.intervals.icu/t/different-syntax-on-workout-builder/125491)
+
 ## Durations are inferred for distance steps
 
 A step written purely as distance comes back with a `duration` the server estimated from
