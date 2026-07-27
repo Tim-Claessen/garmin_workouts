@@ -38,8 +38,12 @@ from the live API that cannot be derived from first principles.
 
 ## Gotchas
 
-- Deploy with `npm run deploy`, never `wrangler deploy` alone — the adapter
-  generates a second config during the build and wrangler deploys that one.
+- **Do not deploy from the CLI.** Deployment is Cloudflare Workers Builds on push
+  to `main`. `npm run deploy` is for emergencies only, and even then never bare
+  `wrangler deploy` — the adapter generates a second config during the build and
+  wrangler deploys that one, so an unrebuilt deploy ships stale configuration.
+- CI runs the Node version in `.nvmrc`. Regenerate `package-lock.json` on that
+  same version or `npm ci` fails the build.
 - `workers_dev` and `preview_urls` must stay `false`.
 - `Astro.locals.runtime.env` was removed in Astro 7. Use
   `import { env } from 'cloudflare:workers'`.

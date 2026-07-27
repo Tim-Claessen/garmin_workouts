@@ -99,14 +99,15 @@ lockfile, do it on Node 24.
 
 ## Deploying
 
-```bash
-npm run deploy
-```
+**Deployment happens through Cloudflare Workers Builds on push to `main`.**
+Do not deploy from the command line. Two deploy paths racing over which version
+is live is worse than a slightly slower one.
 
-**Always use `npm run deploy`, never `wrangler deploy` alone.** The Cloudflare
-adapter generates a second config at `dist/server/wrangler.json` during the
-build, and wrangler deploys *that*. Editing `wrangler.jsonc` and deploying
-without rebuilding silently ships stale configuration.
+`npm run deploy` still exists for emergencies — a broken CI pipeline with a fix
+that has to ship. If you use it, use *that*, never `wrangler deploy` alone: the
+Cloudflare adapter generates a second config at `dist/server/wrangler.json`
+during the build and wrangler deploys that one, so deploying without rebuilding
+silently ships stale configuration.
 
 Rerun `npm run cf-types` after changing bindings in `wrangler.jsonc`.
 
