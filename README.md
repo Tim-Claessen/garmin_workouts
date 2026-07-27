@@ -1,1 +1,131 @@
-# garmin_workouts
+# Garmin workout builder
+
+Paste a running session as text, check what the parser made of it, and send it to
+a Garmin watch. One session at a time, roughly weekly. No accounts, no history,
+no database.
+
+The delivery path is **Intervals.icu → Garmin Connect**, not the Garmin API
+directly. See [DECISIONS.md](DECISIONS.md) for why.
+
+Nothing reaches Garmin without passing through a human review step where every
+value the model inferred has to be confirmed individually.
+
+## How it fits together
+
+```
+paste text
+   │
+   ▼
+/api/parse ──► Workers AI (llama-3.3-70b, JSON schema mode)
+   │              └─► normalised into the internal schema, then Zod-validated
+   ▼
+review screen ──► every inferred value acknowledged by hand
+   │
+   ▼
+/api/send ──► Intervals.icu calendar event ──► Garmin Connect ──► watch
+```
+
+| Module | Job |
+| --- | --- |
+| [src/lib/schema.ts](src/lib/schema.ts) | The workout shape. No pace or HR targets, ever |
+| [src/lib/validate.ts](src/lib/validate.ts) | Hard range checks that run before display and again before send |
+| [src/lib/parse.ts](src/lib/parse.ts) | Prompt, model-facing schema, normalisation. Takes an injected AI runner |
+| [src/lib/ai.ts](src/lib/ai.ts) | The only file that touches the AI binding |
+| [src/lib/to-intervals.ts](src/lib/to-intervals.ts) | Emits the Intervals.icu description **string** |
+| [src/lib/to-plain-english.ts](src/lib/to-plain-english.ts) | The restatement. Never model-generated |
+| [src/client/review.ts](src/client/review.ts) | The review screen |
+
+## One-time setup
+
+### Intervals.icu → Garmin
+
+1. Create an Intervals.icu account.
+2. **Settings → Connections → Garmin Connect** → authorise.
+3. Tick **Upload planned workouts**. Without this nothing goes *out* to the
+   watch — the connection alone only pulls activities in.
+4. Check runs are not excluded by the type filters.
+
+Workouts are pushed roughly **one week ahead** of the current date. Anything
+further out sits on the Intervals calendar until it comes into range. That is not
+a bug.
+
+### Cloudflare
+
+The Worker is reachable only at `run.timclaessen.com`, behind Cloudflare Access
+with an email-OTP policy and a two-address allowlist.
+
+`workers_dev` and `preview_urls` are both `false` in
+[wrangler.jsonc](wrangler.jsonc). **Leave them that way.** Either one re-opens a
+public hostname that Access does not protect. A dashboard toggle is not enough —
+wrangler re-enables `workers.dev` on deploy unless the config says otherwise.
+
+The Worker also verifies the Access JWT on every request, so a request arriving
+by any other route is rejected at the application layer too.
+
+## Running locally
+
+```bash
+npm install
+cp .dev.vars.example .dev.vars   # then fill it in
+npm run dev
+```
+
+`npm test` is offline and instant. The golden suite needs a running Worker,
+because Workers AI is only reachable through the binding:
+
+```bash
+npx wrangler dev --port 8788
+PARSE_URL=http://127.0.0.1:8788/api/parse npx vitest run parse.golden
+```
+
+It writes `tests/.last-golden-run.txt` with the pass rate and every mismatch.
+
+> Local dev shares the rate limit. If the golden suite starts returning 429,
+> stop the dev server and delete `.wrangler/state/v3/kv`.
+
+## Deploying
+
+```bash
+npm run deploy
+```
+
+**Always use `npm run deploy`, never `wrangler deploy` alone.** The Cloudflare
+adapter generates a second config at `dist/server/wrangler.json` during the
+build, and wrangler deploys *that*. Editing `wrangler.jsonc` and deploying
+without rebuilding silently ships stale configuration.
+
+Rerun `npm run cf-types` after changing bindings in `wrangler.jsonc`.
+
+## Rotating secrets
+
+Secrets live on the Worker, not in this repo.
+
+| Secret | Where it comes from | How to rotate |
+| --- | --- | --- |
+| `ICU_API_KEY` | Intervals.icu → Settings → Developer | Regenerate there, then `npx wrangler secret put ICU_API_KEY` |
+| `ACCESS_AUD` | Zero Trust → Access controls → Applications → the app → Overview | Changes only if the Access application is recreated |
+
+`ICU_ATHLETE_ID` and `ACCESS_TEAM_DOMAIN` are plain vars in
+[wrangler.jsonc](wrangler.jsonc) — neither is a credential, and the athlete ID is
+useless without the key.
+
+To list what is set:
+
+```bash
+npx wrangler secret list --name garmin-workouts
+```
+
+Note that a var and a secret cannot share a name. If `wrangler secret put` fails
+with "binding name already in use", the name exists as a plain var and must be
+removed from `wrangler.jsonc` first.
+
+## The thing most likely to bite you
+
+In Intervals.icu syntax **`m` means minutes**. Metres are `mtr`. Writing `400m`
+for a 400 metre rep produces a 400-*minute* step — a 26-hour workout that the API
+accepts with HTTP 200 and no warning.
+
+[src/lib/to-intervals.ts](src/lib/to-intervals.ts) therefore never emits a bare
+number followed by `m` for a distance; everything goes out as `km`, and a test
+asserts it. See [docs/intervals-syntax.md](docs/intervals-syntax.md) for the
+captured payloads.

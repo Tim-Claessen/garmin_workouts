@@ -1,4 +1,6 @@
 ---
+import '../styles/tokens.css';
+
 export const prerender = false;
 
 const email = Astro.locals.accessEmail;
@@ -9,11 +11,81 @@ const email = Astro.locals.accessEmail;
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
     <title>Garmin workout builder</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600&family=Inter:wght@400;500&display=swap"
+    />
   </head>
   <body>
-    <h1>Garmin workout builder</h1>
-    <p>Scaffold only. Paste input and the review screen come in phases 3 and 4.</p>
-    {email && <p>Signed in as {email}</p>}
+    <main class="shell">
+      <!-- Paste -->
+      <section id="view-paste">
+        <h1>Garmin workout builder</h1>
+        <p class="lede">Paste this week's session. You'll get to check it before anything is sent.</p>
+
+        <label class="sr-only" for="paste">Session text</label>
+        <textarea
+          id="paste"
+          placeholder={'Warm up 10 min\n6 x 800m with 90 sec recovery\nCool down 10 min'}
+        ></textarea>
+
+        <p id="parse-error" class="panel error-panel hidden"></p>
+
+        <button id="convert" class="btn" type="button">Convert</button>
+      </section>
+
+      <!-- Review -->
+      <section id="view-review" class="hidden">
+        <div class="panel">
+          <label class="sr-only" for="workout-name">Workout name</label>
+          <input id="workout-name" type="text" style="width:100%" />
+        </div>
+
+        <div class="panel">
+          <p id="restatement" class="restatement"></p>
+        </div>
+
+        <ul id="stack" class="stack"></ul>
+
+        <div class="panel">
+          <label for="date">Date</label>
+          <input id="date" type="date" style="width:100%; margin-top:8px" />
+          <p id="send-notice" class="notice"></p>
+          <p id="send-error" class="panel error-panel hidden"></p>
+          <button id="send" class="btn" type="button" disabled>Send to Garmin ▸</button>
+          <button id="back" class="btn btn--quiet" type="button">Back to the text</button>
+        </div>
+      </section>
+
+      <!-- Success -->
+      <section id="view-success" class="hidden success">
+        <div class="panel">
+          <h2>Sent</h2>
+          <p id="success-line"></p>
+        </div>
+        <button id="again" class="btn btn--quiet" type="button">Build another</button>
+      </section>
+
+      <!-- The original text, alongside on desktop and behind a toggle on mobile -->
+      <aside id="original" class="original panel hidden">
+        <button id="original-toggle" class="btn btn--quiet original__toggle" type="button">
+          Show original
+        </button>
+        <div id="original-body" class="hidden">
+          <pre id="original-text"></pre>
+        </div>
+      </aside>
+
+      {email && <p class="notice">Signed in as {email}</p>}
+    </main>
+
+    <script>
+      import { init } from '../client/review';
+      init();
+    </script>
   </body>
 </html>
