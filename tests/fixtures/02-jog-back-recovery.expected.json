@@ -1,0 +1,16 @@
+{
+  "_why": "Three separate inferences in one session: WU/CD have no duration so should become lap-press, and 'jog back recovery' has no number at all. Every one of these should come back inferred, which means the review screen should be almost entirely amber.",
+  "name": "Track night",
+  "blocks": [
+    { "kind": "step", "type": "warmup", "duration": { "kind": "distance", "metres": 2000 }, "untilLapPress": true },
+    {
+      "kind": "repeat",
+      "reps": 10,
+      "steps": [
+        { "kind": "step", "type": "run", "duration": { "kind": "distance", "metres": 400 }, "untilLapPress": false },
+        { "kind": "step", "type": "recover", "duration": { "kind": "time", "anyValue": true, "seconds": 90 }, "untilLapPress": false }
+      ]
+    },
+    { "kind": "step", "type": "cooldown", "duration": { "kind": "distance", "metres": 2000 }, "untilLapPress": true }
+  ]
+}

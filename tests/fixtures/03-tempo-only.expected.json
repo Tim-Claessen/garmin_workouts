@@ -1,0 +1,7 @@
+{
+  "_why": "Tests restraint. No warm-up or cool-down is mentioned, so none should be added — the prompt forbids inventing steps. A model that helpfully bolts on a warm-up fails this.",
+  "name": "5km tempo run",
+  "blocks": [
+    { "kind": "step", "type": "run", "duration": { "kind": "distance", "metres": 5000 }, "untilLapPress": false }
+  ]
+}

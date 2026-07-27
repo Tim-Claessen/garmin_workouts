@@ -1,0 +1,16 @@
+{
+  "_why": "The mirror image of the unit trap: everything here is genuinely time, so nothing should end up as a distance. Also checks that the leading and trailing 'easy' blocks are read as warm-up and cool-down rather than as runs.",
+  "name": "Thursday",
+  "blocks": [
+    { "kind": "step", "type": "warmup", "duration": { "kind": "time", "seconds": 900 }, "untilLapPress": false },
+    {
+      "kind": "repeat",
+      "reps": 5,
+      "steps": [
+        { "kind": "step", "type": "run", "duration": { "kind": "time", "seconds": 180 }, "untilLapPress": false },
+        { "kind": "step", "type": "recover", "duration": { "kind": "time", "seconds": 120 }, "untilLapPress": false }
+      ]
+    },
+    { "kind": "step", "type": "cooldown", "duration": { "kind": "time", "seconds": 900 }, "untilLapPress": false }
+  ]
+}

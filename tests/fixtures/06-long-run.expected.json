@@ -1,0 +1,7 @@
+{
+  "_why": "The HR instruction must be discarded — there is no field for it and the design forbids HR targets outright. Also a boundary case: 90 minutes is exactly the per-step time limit, so it must pass validation rather than trip it.",
+  "name": "Sunday long run",
+  "blocks": [
+    { "kind": "step", "type": "run", "duration": { "kind": "time", "seconds": 5400 }, "untilLapPress": false }
+  ]
+}

@@ -11,6 +11,9 @@ dist/
 # Wrangler
 .wrangler/
 
+# Output of the last golden run — a snapshot of model behaviour, not source
+tests/.last-golden-run.txt
+
 # Generated Cloudflare binding types
 worker-configuration.d.ts
 

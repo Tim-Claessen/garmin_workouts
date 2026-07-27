@@ -1,0 +1,16 @@
+{
+  "_why": "Baseline. The '@ threshold pace' must be dropped entirely — there are no pace fields and inventing one is the failure this whole design is built to prevent.",
+  "name": "Tuesday session",
+  "blocks": [
+    { "kind": "step", "type": "warmup", "duration": { "kind": "time", "seconds": 600 }, "untilLapPress": false },
+    {
+      "kind": "repeat",
+      "reps": 6,
+      "steps": [
+        { "kind": "step", "type": "run", "duration": { "kind": "distance", "metres": 800 }, "untilLapPress": false },
+        { "kind": "step", "type": "recover", "duration": { "kind": "time", "seconds": 90 }, "untilLapPress": false }
+      ]
+    },
+    { "kind": "step", "type": "cooldown", "duration": { "kind": "time", "seconds": 600 }, "untilLapPress": false }
+  ]
+}
