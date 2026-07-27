@@ -1,0 +1,16 @@
+{
+  "_why": "How sessions actually arrive — conversational, with a greeting to ignore and a genuinely ambiguous ending. 'an easy 10' could be 10 minutes or 10km; 10 minutes is the sane reading for a cool-down and should come back inferred. Getting this one wrong by an order of magnitude is exactly what the review screen exists to catch.",
+  "name": "Weekly session",
+  "blocks": [
+    { "kind": "step", "type": "warmup", "duration": { "kind": "time", "seconds": 900 }, "untilLapPress": false },
+    {
+      "kind": "repeat",
+      "reps": 8,
+      "steps": [
+        { "kind": "step", "type": "run", "duration": { "kind": "distance", "metres": 600 }, "untilLapPress": false },
+        { "kind": "step", "type": "recover", "duration": { "kind": "time", "seconds": 75 }, "untilLapPress": false }
+      ]
+    },
+    { "kind": "step", "type": "cooldown", "duration": { "kind": "time", "seconds": 600 }, "untilLapPress": false }
+  ]
+}

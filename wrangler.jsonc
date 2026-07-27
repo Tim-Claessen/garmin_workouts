@@ -24,6 +24,15 @@
     "binding": "AI"
   },
 
+  // Fixed-window counters for the parse endpoint rate limit.
+  "kv_namespaces": [
+    {
+      "binding": "RATE_LIMIT",
+      "id": "02a29c091d8545cd9e05c826752ce2e3"
+    }
+  ],
+
+
   "observability": {
     "enabled": true
   },
