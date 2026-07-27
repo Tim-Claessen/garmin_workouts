@@ -95,6 +95,22 @@ from the live API that cannot be derived from first principles.
   wrangler deploys that one, so an unrebuilt deploy ships stale configuration.
 - CI runs the Node version in `.nvmrc`. Regenerate `package-lock.json` on that
   same version or `npm ci` fails the build.
+- **Never let a Windows `npm install` write `package-lock.json`.** npm 11 on
+  Windows prunes optional dependencies that do not apply to the current platform
+  out of the lock while leaving the *references* to them in place. Adding two
+  devDependencies this way silently dropped `@emnapi/core` and `@emnapi/runtime`
+  — Linux-only optional deps of `@img/sharp-wasm32` — and `npm ci` on the Linux
+  builder failed with `Missing: @emnapi/runtime from lock file`. Nothing local
+  catches it: the build, the tests and the typecheck all pass on the pruned lock,
+  because Windows genuinely does not need those packages.
+  Regenerate with CI's own npm instead, which resolves for every platform:
+
+  ```
+  npx npm@10.9.2 install --package-lock-only
+  npx npm@10.9.2 ci --dry-run          # must not report EUSAGE
+  ```
+
+  CI reports its npm version in the first lines of the build log; match it.
 - CI needs **Build command `npm run build`** set in the dashboard, separate from
   the deploy command. Do not try to move this into `wrangler.jsonc` as a `build`
   block — wrangler resolves `main` at config load, before that command runs, so
