@@ -44,6 +44,10 @@ from the live API that cannot be derived from first principles.
   wrangler deploys that one, so an unrebuilt deploy ships stale configuration.
 - CI runs the Node version in `.nvmrc`. Regenerate `package-lock.json` on that
   same version or `npm ci` fails the build.
+- CI needs **Build command `npm run build`** set in the dashboard, separate from
+  the deploy command. Do not try to move this into `wrangler.jsonc` as a `build`
+  block — wrangler resolves `main` at config load, before that command runs, so
+  the deploy fails on a missing entry point even though the build succeeded.
 - `workers_dev` and `preview_urls` must stay `false`.
 - `Astro.locals.runtime.env` was removed in Astro 7. Use
   `import { env } from 'cloudflare:workers'`.

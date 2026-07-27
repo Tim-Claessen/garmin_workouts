@@ -103,6 +103,22 @@ lockfile, do it on Node 24.
 Do not deploy from the command line. Two deploy paths racing over which version
 is live is worse than a slightly slower one.
 
+The pipeline is configured in the dashboard under **Settings → Build**:
+
+| Setting | Value |
+| --- | --- |
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+
+**The build command is not optional and cannot be moved into the repo.** The
+Cloudflare adapter generates its entrypoint and a redirected config
+(`dist/server/wrangler.json`) during the build, and wrangler resolves `main`
+when it loads configuration — before any `build.command` in `wrangler.jsonc`
+could run. So a `build` block there does not help: the build executes but
+wrangler has already resolved `main` against the root config and fails with
+"entry-point file was not found". The build genuinely has to be a separate,
+earlier step.
+
 `npm run deploy` still exists for emergencies — a broken CI pipeline with a fix
 that has to ship. If you use it, use *that*, never `wrangler deploy` alone: the
 Cloudflare adapter generates a second config at `dist/server/wrangler.json`
