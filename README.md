@@ -54,6 +54,33 @@ So the parser lifts a short label from the athlete's own wording ("threshold",
 duration. `sanitiseCue()` strips **every digit** before it goes anywhere near the
 description — a number in a cue is the 26-hour failure by another route.
 
+## Athletes
+
+The app can send to more than one Intervals.icu account. The roster is a single
+JSON secret, `ICU_ATHLETES`:
+
+```json
+[
+  { "id": "zoe", "label": "Zoe", "athleteId": "i123456", "apiKey": "…" },
+  { "id": "tim", "label": "Tim", "athleteId": "i652699", "apiKey": "…" }
+]
+```
+
+One secret rather than a pair of bindings per person means adding someone is one
+`wrangler secret put` and no code change — and there is still nothing to store,
+so the no-database decision holds.
+
+**API keys never leave the Worker.** `/api/athletes` returns ids and labels only;
+the client sends an id back and credentials are resolved server-side. An id that
+is present but unknown is an error rather than a fallback, because silently
+sending to the wrong calendar is worse than failing.
+
+The picker appears only with two or more athletes, and the choice is remembered
+in `localStorage`. The original single-athlete bindings still work when
+`ICU_ATHLETES` is absent.
+
+Full walkthrough: [docs/adding-an-athlete.md](docs/adding-an-athlete.md).
+
 ## Clearing the calendar
 
 The Intervals.icu web interface makes bulk tidying painful, so the paste screen
@@ -69,6 +96,10 @@ Two hard limits, both deliberate:
 
 Deleting a planned workout does **not** remove a copy already synced to the
 watch.
+
+The confirmation names whose calendar is about to be emptied. With several
+athletes configured, that is the only thing standing between a mis-set picker
+and someone else's training plan.
 
 ## One-time setup
 
@@ -96,6 +127,28 @@ wrangler re-enables `workers.dev` on deploy unless the config says otherwise.
 
 The Worker also verifies the Access JWT on every request, so a request arriving
 by any other route is rejected at the application layer too.
+
+### Signing in as someone else
+
+Access has no account switcher. To change which email you are signed in as, use
+the **Sign out** link at the foot of the page — it hits
+`/cdn-cgi/access/logout`, which clears the Access cookie — then sign in again
+with the other address.
+
+The old session stops being accepted within about 30 seconds.
+
+Note this is separate from the **Send to** picker. Signing in as someone else
+changes *who is using the app*; the picker changes *whose calendar receives the
+workout*. Either can be changed without touching the other.
+
+### Tidying the login page
+
+The Access sign-in page can carry a name, logo, colours and header text:
+**Cloudflare One → Reusable components → Custom pages → Access login page →
+Manage.** There is a live preview, and the change applies to every Access
+application on the account.
+
+It is branding only — the page structure and the OTP flow are fixed.
 
 ## Running locally
 
@@ -168,12 +221,14 @@ Secrets live on the Worker, not in this repo.
 
 | Secret | Where it comes from | How to rotate |
 | --- | --- | --- |
-| `ICU_API_KEY` | Intervals.icu → Settings → Developer | Regenerate there, then `npx wrangler secret put ICU_API_KEY` |
+| `ICU_ATHLETES` | Intervals.icu → Settings → Developer, per athlete | Regenerate the key there, then rewrite the whole array with `npx wrangler secret put ICU_ATHLETES` |
 | `ACCESS_AUD` | Zero Trust → Access controls → Applications → the app → Overview | Changes only if the Access application is recreated |
 
-`ICU_ATHLETE_ID` and `ACCESS_TEAM_DOMAIN` are plain vars in
-[wrangler.jsonc](wrangler.jsonc) — neither is a credential, and the athlete ID is
-useless without the key.
+`ACCESS_TEAM_DOMAIN` is a plain var in [wrangler.jsonc](wrangler.jsonc) — it
+appears in every Access redirect and is not a credential.
+
+`ICU_ATHLETE_ID` and `ICU_API_KEY` are the original single-athlete bindings.
+They still work, but `ICU_ATHLETES` supersedes them and takes precedence.
 
 To list what is set:
 
@@ -198,47 +253,28 @@ captured payloads.
 
 ## TODO
 
-### Untested in the real world
+### Onboarding Zoe
 
-- [ ] **`/api/send` end to end.** Written, revalidated server-side, never run
-      against a live calendar. First run should be a throwaway date, watched.
-- [ ] **Clearing the calendar.** Scope logic is unit tested and single-event
-      DELETE is proven, but the bulk path has never run. Try `Upcoming` with one
-      disposable workout before trusting `Everything`.
-- [ ] **Step cues on the watch.** Confirmed they parse and store correctly.
-      Nobody has looked at a watch to see how they display.
-
-### Security and access
-
-- [ ] Confirm a non-allowlisted email is actually rejected by Access.
-- [ ] Add Zoe's address to the Access policy.
-- [ ] Delete the leftover test events from the Intervals.icu calendar
-      ("API test A", "Testing").
-
-### Setup still to do
-
-- [ ] Zoe's Intervals.icu account, Garmin connection, and **Upload planned
-      workouts** ticked.
-- [ ] Point `ICU_ATHLETE_ID` at her athlete ID once it exists.
+- [ ] Work through [docs/adding-an-athlete.md](docs/adding-an-athlete.md) for her
+      account, then add her to `ICU_ATHLETES`.
+- [ ] Add her email to the Access policy if she will open the app herself.
 - [ ] Write `docs/for-zoe.md` — three sentences: build it the night before, open
       Garmin Connect to sync, the lap button skips to the next step.
 
-### Open questions
-
-- [ ] **Does the watch show "until lap press" or a countdown from the 2km
-      placeholder?** If it counts down, the dashed-rail treatment on the review
-      screen contradicts what she'll actually see. This one has design
-      consequences.
-- [ ] Whether a lap-press placeholder can be trivially small (`1s`) without the
-      watch behaving oddly. Would simplify generation.
-
 ### Quality
 
-- [ ] **Replace the synthetic fixtures with real sessions** from Zoe's program.
-      They currently test the failure modes we predicted, not necessarily the
-      ones that occur.
+- [ ] **Replace the synthetic fixtures with real sessions** from her program.
+      They currently cover the failure modes we predicted, not necessarily the
+      ones that occur. The golden suite picks up any `.txt` with a matching
+      `.expected.json`, so adding one is a two-file change.
 - [ ] Fixture 05 fails: "finish with an easy 10" reads as a distance rather than
-      10 minutes. Genuinely ambiguous — left failing on purpose rather than
-      tuned away.
-- [ ] The review screen has had no accessibility pass beyond focus rings and
-      44px targets.
+      10 minutes. Genuinely ambiguous in the source text — left failing on
+      purpose rather than tuned away.
+- [ ] No accessibility pass beyond focus rings, 44px targets and contrast.
+
+### If it gets more use
+
+- [ ] Whether a lap-press placeholder can be trivially small (`1s`) rather than
+      2km. Would stop placeholders inflating planned-load figures.
+- [ ] Nothing caches the athlete roster; every page load re-reads the secret.
+      Fine at this volume.

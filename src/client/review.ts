@@ -422,9 +422,9 @@ async function send(): Promise<void> {
     const response = await fetch('/api/send', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ workout, date }),
+      body: JSON.stringify({ workout, date, athlete: currentAthleteId() }),
     });
-    const payload = (await response.json()) as { error?: string };
+    const payload = (await response.json()) as { error?: string; athlete?: string };
 
     if (!response.ok) {
       failSend(payload.error ?? 'That did not send. Try again.');
@@ -434,13 +434,73 @@ async function send(): Promise<void> {
     const when = new Date(`${date}T00:00:00`).toLocaleDateString('en-AU', {
       weekday: 'long',
     });
+    const who = payload.athlete ? `${payload.athlete}'s calendar` : 'the calendar';
     el('success-line').textContent =
-      `On the calendar for ${when}. Open Garmin Connect on your phone to sync it to your watch.`;
+      `On ${who} for ${when}. Open Garmin Connect on your phone to sync it to your watch.`;
     sending = false;
     show('success');
     render();
   } catch {
     failSend('Could not reach the server. Check your connection and try again.');
+  }
+}
+
+/* ---- Athletes ------------------------------------------------------------ */
+
+const ATHLETE_STORAGE_KEY = 'garmin-builder:athlete';
+
+/** Empty until the roster loads. Never holds credentials — labels and ids only. */
+let athletes: { id: string; label: string }[] = [];
+
+function currentAthleteId(): string | null {
+  const select = document.getElementById('athlete') as HTMLSelectElement | null;
+  return select?.value || null;
+}
+
+function currentAthleteLabel(): string {
+  const id = currentAthleteId();
+  return athletes.find((a) => a.id === id)?.label ?? 'this athlete';
+}
+
+async function loadAthletes(): Promise<void> {
+  const row = el('athlete-row');
+  const select = el<HTMLSelectElement>('athlete');
+
+  try {
+    const response = await fetch('/api/athletes');
+    const payload = (await response.json()) as {
+      athletes?: { id: string; label: string }[];
+      error?: string;
+    };
+
+    if (!response.ok || !payload.athletes?.length) {
+      showError(payload.error ?? 'No athletes are set up yet.');
+      return;
+    }
+
+    athletes = payload.athletes;
+    select.replaceChildren();
+    for (const athlete of athletes) {
+      const option = document.createElement('option');
+      option.value = athlete.id;
+      option.textContent = athlete.label;
+      select.append(option);
+    }
+
+    const remembered = localStorage.getItem(ATHLETE_STORAGE_KEY);
+    if (remembered && athletes.some((a) => a.id === remembered)) {
+      select.value = remembered;
+    }
+
+    select.addEventListener('change', () => {
+      localStorage.setItem(ATHLETE_STORAGE_KEY, select.value);
+    });
+
+    // With one athlete there is no choice to make, so the picker stays hidden
+    // rather than presenting a menu of one.
+    row.classList.toggle('hidden', athletes.length < 2);
+  } catch {
+    showError('Could not load the athlete list.');
   }
 }
 
@@ -468,22 +528,33 @@ async function askToClear(scope: ClearScope): Promise<void> {
   clearStatus('Counting…');
 
   try {
-    const response = await fetch(`/api/clear?scope=${scope}`);
-    const payload = (await response.json()) as { count?: number; error?: string };
+    const athlete = currentAthleteId();
+    const response = await fetch(
+      `/api/clear?scope=${scope}${athlete ? `&athlete=${encodeURIComponent(athlete)}` : ''}`,
+    );
+    const payload = (await response.json()) as {
+      count?: number;
+      athlete?: string;
+      error?: string;
+    };
 
     if (!response.ok) {
       clearStatus(payload.error ?? 'Could not reach Intervals.icu.', true);
       return;
     }
 
+    const who = payload.athlete ?? currentAthleteLabel();
+
     if (!payload.count) {
-      clearStatus(`No ${SCOPE_LABEL[scope]} to remove.`);
+      clearStatus(`No ${SCOPE_LABEL[scope]} on ${who}'s calendar.`);
       return;
     }
 
     pendingScope = scope;
+    // Naming the athlete in the confirmation is the point: this is the one place
+    // a wrong selection would be expensive and irreversible.
     el('clear-confirm-text').textContent =
-      `Delete ${payload.count} ${payload.count === 1 ? 'workout' : 'workouts'} from Intervals.icu? This cannot be undone.`;
+      `Delete ${payload.count} ${payload.count === 1 ? 'workout' : 'workouts'} from ${who}'s calendar? This cannot be undone.`;
     el('clear-confirm').classList.remove('hidden');
     clearStatus('');
   } catch {
@@ -503,11 +574,12 @@ async function doClear(): Promise<void> {
     const response = await fetch('/api/clear', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ scope, confirm: scope }),
+      body: JSON.stringify({ scope, confirm: scope, athlete: currentAthleteId() }),
     });
     const payload = (await response.json()) as {
       deleted?: number;
       failed?: number;
+      athlete?: string;
       error?: string;
     };
 
@@ -529,6 +601,8 @@ async function doClear(): Promise<void> {
 }
 
 export function init(): void {
+  void loadAthletes();
+
   el('convert').addEventListener('click', () => void convert());
   el('send').addEventListener('click', () => void send());
 

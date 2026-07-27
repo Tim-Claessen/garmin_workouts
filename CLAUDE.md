@@ -28,6 +28,10 @@ from the live API that cannot be derived from first principles.
 - **Bulk deletion only ever touches `category: "WORKOUT"`, and never recorded
   activities.** The calendar holds season markers, notes and races this app did
   not create, and completed runs are training history. Both are off limits.
+- **API keys never reach the browser.** `/api/athletes` returns ids and labels
+  only. The client sends an id; credentials are resolved server-side. An unknown
+  id is an error, never a fallback to the default — silently writing to the wrong
+  person's calendar is the worst thing this app could do.
 
 ## Shape of the code
 
@@ -41,9 +45,10 @@ from the live API that cannot be derived from first principles.
   reflects exactly what will be sent.
 - Lap-press is a **boolean flag on a step**, not a duration variant. The step
   still carries a placeholder duration that Intervals.icu requires.
-- `intervals-admin.ts` takes credentials as an argument rather than reading the
-  binding, for the same reason as `parse.ts`: it keeps the scope logic — which
-  decides what gets irreversibly deleted — unit testable under Node.
+- `intervals-admin.ts` and `athletes.ts` take their inputs as arguments rather
+  than reading bindings, for the same reason as `parse.ts`: it keeps the logic
+  that decides *what gets deleted* and *whose calendar is written to* unit
+  testable under Node. `roster.ts` is the thin binding-backed wrapper.
 - Client state that gates a button (`sending`) lives in a variable and is applied
   in `render()`, never written straight onto the DOM node. Writing it directly is
   what left the send button stranded on "Sending…" after a view change.

@@ -12,6 +12,6 @@
 # Zero Trust > Access controls > Applications > (the app) > Overview.
 ACCESS_AUD=0000000000000000000000000000000000000000000000000000000000000000
 
-# Intervals.icu. Athlete IDs include the leading "i".
-ICU_ATHLETE_ID=i000000
-ICU_API_KEY=replace-with-a-rotated-key
+# The athlete roster. A JSON array on one line — see docs/adding-an-athlete.md.
+# Athlete IDs include the leading "i".
+ICU_ATHLETES=[{"id":"example","label":"Example","athleteId":"i000000","apiKey":"replace-me"}]

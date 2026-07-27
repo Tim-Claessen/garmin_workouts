@@ -1,19 +1,8 @@
 import type { APIRoute } from 'astro';
-import { env } from 'cloudflare:workers';
-import {
-  clearWorkouts,
-  listWorkouts,
-  type ClearScope,
-  type Credentials,
-} from '../../lib/intervals-admin';
+import { resolveAthlete } from '../../lib/roster';
+import { clearWorkouts, listWorkouts, type ClearScope } from '../../lib/intervals-admin';
 
 export const prerender = false;
-
-function credentials(): Credentials | null {
-  const athleteId = env.ICU_ATHLETE_ID;
-  const apiKey = env.ICU_API_KEY;
-  return athleteId && apiKey ? { athleteId, apiKey } : null;
-}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -33,19 +22,21 @@ export const GET: APIRoute = async ({ url }) => {
   const scope = readScope(url.searchParams.get('scope'));
   if (!scope) return json({ error: 'Unknown scope.' }, 400);
 
-  const creds = credentials();
-  if (!creds) return json({ error: 'This app is not connected to Intervals.icu yet.' }, 500);
+  const resolved = resolveAthlete(url.searchParams.get('athlete'));
+  if (!resolved.ok) return json({ error: resolved.error }, resolved.status);
 
   try {
-    const events = await listWorkouts(creds, scope);
-    return json({ scope, count: events.length });
+    const events = await listWorkouts(resolved.athlete, scope);
+    // The label goes back with the count so the confirmation can name whose
+    // calendar is about to be emptied.
+    return json({ scope, count: events.length, athlete: resolved.athlete.label });
   } catch {
     return json({ error: 'Could not reach Intervals.icu.' }, 502);
   }
 };
 
 export const POST: APIRoute = async ({ request }) => {
-  let body: { scope?: unknown; confirm?: unknown };
+  let body: { scope?: unknown; confirm?: unknown; athlete?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -61,12 +52,14 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: 'That deletion was not confirmed.' }, 400);
   }
 
-  const creds = credentials();
-  if (!creds) return json({ error: 'This app is not connected to Intervals.icu yet.' }, 500);
+  const resolved = resolveAthlete(
+    typeof body.athlete === 'string' ? body.athlete : null,
+  );
+  if (!resolved.ok) return json({ error: resolved.error }, resolved.status);
 
   try {
-    const result = await clearWorkouts(creds, scope);
-    return json(result);
+    const result = await clearWorkouts(resolved.athlete, scope);
+    return json({ ...result, athlete: resolved.athlete.label });
   } catch {
     return json({ error: 'Could not reach Intervals.icu. Nothing was deleted.' }, 502);
   }

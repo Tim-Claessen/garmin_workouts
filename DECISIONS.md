@@ -110,9 +110,32 @@ One line per decision, with the reason. Newest at the bottom.
   must echo the scope back to the endpoint. There is no undo, so a stray POST
   should not be enough.
 
-## Open
+## Athletes
 
-- **Whether the watch shows "until lap press" or a countdown from the
-  placeholder** for a lap-press step. If it shows the countdown, the dashed-rail
-  open-ended treatment on the review screen is telling Zoe something her watch
-  will contradict. Needs eyes on the device.
+- **A roster in one JSON secret, not a pair of bindings per person.** Adding
+  someone is one `wrangler secret put` and no code change, and there is still
+  nothing persisted — the roster is configuration, so the no-database decision
+  holds.
+- **Cloudflare Access is the wrong layer for this.** Access controls who can open
+  the app. Which Intervals.icu calendar receives a workout is a different
+  question, and conflating them would mean a network policy change every time
+  someone new is added.
+- **API keys never reach the browser.** The client sees ids and labels; the
+  Worker resolves credentials.
+- **An unknown athlete id is an error, not a fallback to the default.** Failing a
+  request is recoverable. Silently writing to the wrong person's calendar is not.
+- **The picker is hidden with a single athlete**, rather than presenting a menu
+  of one.
+- **Both the send confirmation and the delete confirmation name the athlete.**
+  With several configured, that wording is the only thing between a mis-set
+  picker and someone else's training plan.
+
+## Known characteristics
+
+- **A lap-press step carries a 2km placeholder**, because Intervals.icu requires
+  a duration alongside the flag. The placeholder feeds planned-load totals even
+  though the lap press is what actually ends the step, so figures for a session
+  with open-ended warm-up and cool-down read slightly high. Accepted: the
+  alternative is a placeholder so small it looks wrong on the watch.
+- **The roster is re-read on every request.** No caching. Fine at one session a
+  week, and it means a secret change takes effect immediately.

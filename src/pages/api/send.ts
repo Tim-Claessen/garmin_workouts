@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { env } from 'cloudflare:workers';
+import { resolveAthlete } from '../../lib/roster';
 import { workoutSchema } from '../../lib/schema';
 import { toDescription, toIntervalsEvent } from '../../lib/to-intervals';
 import { validateWorkout } from '../../lib/validate';
@@ -16,7 +16,7 @@ function json(body: unknown, status = 200) {
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export const POST: APIRoute = async ({ request }) => {
-  let body: { workout?: unknown; date?: unknown };
+  let body: { workout?: unknown; date?: unknown; athlete?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -40,11 +40,11 @@ export const POST: APIRoute = async ({ request }) => {
     return json({ error: errors[0]!.message, validationErrors: errors }, 422);
   }
 
-  const athleteId = env.ICU_ATHLETE_ID;
-  const apiKey = env.ICU_API_KEY;
-  if (!athleteId || !apiKey) {
-    return json({ error: 'This app is not connected to Intervals.icu yet.' }, 500);
-  }
+  const resolved = resolveAthlete(
+    typeof body.athlete === 'string' ? body.athlete : null,
+  );
+  if (!resolved.ok) return json({ error: resolved.error }, resolved.status);
+  const { athleteId, apiKey, label } = resolved.athlete;
 
   const event = toIntervalsEvent(parsed.data, date);
 
@@ -89,6 +89,9 @@ export const POST: APIRoute = async ({ request }) => {
     ok: true,
     eventId: created.id ?? null,
     date,
+    // Echoed back so the success state can name who it went to. Sending to the
+    // wrong calendar should be obvious immediately, not discovered on a run.
+    athlete: label,
     description: event.description,
   });
 };

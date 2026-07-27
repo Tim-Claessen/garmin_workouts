@@ -125,12 +125,25 @@ and that is not a bug.
 Requires **Settings → Connections → Garmin Connect → "Upload planned workouts"** ticked. The
 Garmin connection alone only pulls activities in; without that checkbox nothing goes out.
 
-## Open questions
+## Step cues
 
-- **What does the watch display for a press-lap step** — "until lap press", or a countdown
-  from the placeholder? If it shows the countdown, the review screen's open-ended step
-  treatment is showing something the watch contradicts. Unresolved; needs eyes on the device.
-- Whether a press-lap step's placeholder can be made trivially small (`1s`) without the watch
-  behaving oddly. Would simplify generation.
-- Forum reports of press-lap steps not rendering on Edge devices exist. Unverified on a
-  Forerunner.
+Text placed before the duration on a step line becomes the step's `text`, and is what shows
+on the watch mid-run:
+
+```
+- threshold effort 0.8km   →   { text: "threshold effort", distance: 800 }
+- Press lap easy jog 2km   →   { text: "Press lap easy jog", until_lap_press: true, distance: 2000 }
+```
+
+This is how the athlete's own wording reaches the watch — Intervals.icu has no separate notes
+field, and `description` is the only free text.
+
+**Cues must contain no digits.** A number in a cue can be read as a duration by the parser,
+which is the unit trap by another route. `sanitiseCue()` in `to-intervals.ts` strips them.
+
+## Notes
+
+- Placeholders on press-lap steps feed planned-load totals even though the lap press is what
+  ends the step, so a session with open-ended warm-up and cool-down reads slightly high.
+- Forum reports exist of press-lap steps not rendering in the workout overview on Edge
+  devices. Forerunners are the target here and are unaffected.

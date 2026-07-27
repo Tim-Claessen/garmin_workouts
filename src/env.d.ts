@@ -10,6 +10,12 @@
 interface Env {
   /** Application Audience (AUD) tag for the run.timclaessen.com Access app. */
   ACCESS_AUD?: string;
+  /**
+   * JSON array of athletes: [{ id, label, athleteId, apiKey }].
+   * The roster the app can send to. See docs/adding-an-athlete.md.
+   */
+  ICU_ATHLETES?: string;
+  /** Legacy single-athlete key, still honoured when ICU_ATHLETES is absent. */
   ICU_API_KEY?: string;
 }
 

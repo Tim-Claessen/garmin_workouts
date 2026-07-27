@@ -27,6 +27,11 @@ const email = Astro.locals.accessEmail;
         <h1>Garmin workout builder</h1>
         <p class="lede">Paste this week's session. You'll get to check it before anything is sent.</p>
 
+        <div id="athlete-row" class="panel athlete hidden">
+          <label for="athlete">Send to</label>
+          <select id="athlete"></select>
+        </div>
+
         <label class="sr-only" for="paste">Session text</label>
         <textarea
           id="paste"
@@ -112,7 +117,17 @@ const email = Astro.locals.accessEmail;
         </div>
       </aside>
 
-      {email && <p class="notice">Signed in as {email}</p>}
+      <p class="notice signed-in">
+        <span>{email ? `Signed in as ${email}` : ''}</span>
+        {/*
+          Clears the Cloudflare Access cookie. This is how you switch to a
+          different email — Access has no account switcher, so signing out and
+          back in with the other address is the mechanism. Shown regardless of
+          whether the identity is known, so it does not disappear if JWT
+          verification is off.
+        */}
+        <a href="/cdn-cgi/access/logout">Sign out</a>
+      </p>
     </main>
 
     <script>
