@@ -6,6 +6,10 @@ import type { Block, Step, Workout } from './schema';
  * their job is to make the failure modes observed in the Test 0.4 spike
  * impossible to reach.
  *
+ * The messages name the value and what to check, but never the step number: the
+ * review screen owns the numbering, because only it knows a step's position once
+ * repeats are expanded. It prefixes "Step N" when it renders these.
+ *
  * The one that matters most is MAX_STEP_TIME_SECONDS. Writing `400m` instead of
  * `400mtr` in Intervals.icu syntax produces a 400-*minute* step, and the API
  * accepts it with HTTP 200 and no warning. That is a 26-hour workout that syncs
@@ -68,7 +72,7 @@ function checkStep(
         code: 'step_time_too_long',
         blockIndex,
         stepIndex,
-        message: `A single step of ${Math.round(step.duration.seconds / 60)} minutes is longer than the ${MAX_STEP_TIME_SECONDS / 60}-minute limit. This is usually a distance that was read as a time.`,
+        message: `A single step of ${Math.round(step.duration.seconds / 60)} minutes is over the ${MAX_STEP_TIME_SECONDS / 60}-minute limit. That usually means a distance was read as a time — check the units.`,
       });
     }
   } else {
@@ -77,7 +81,7 @@ function checkStep(
         code: 'step_distance_too_long',
         blockIndex,
         stepIndex,
-        message: `A single step of ${(step.duration.metres / 1000).toFixed(1)}km is longer than a marathon.`,
+        message: `A single step of ${Number((step.duration.metres / 1000).toFixed(1))} km is longer than anything this tool will send — check the units.`,
       });
     }
     if (step.duration.metres < MIN_STEP_DISTANCE_METRES) {
@@ -85,7 +89,7 @@ function checkStep(
         code: 'step_distance_too_short',
         blockIndex,
         stepIndex,
-        message: `A step of ${step.duration.metres}m is shorter than the ${MIN_STEP_DISTANCE_METRES}m minimum.`,
+        message: `A single step of ${step.duration.metres} m is under the ${MIN_STEP_DISTANCE_METRES} m minimum — check the units.`,
       });
     }
   }
@@ -118,7 +122,7 @@ export function validateWorkout(workout: Workout): ValidationError[] {
         code: 'too_many_reps',
         blockIndex,
         stepIndex: null,
-        message: `${block.reps} repeats is more than the ${MAX_REPS} allowed.`,
+        message: `${block.reps} repeats is more than the ${MAX_REPS} allowed — check the number.`,
       });
     }
 
