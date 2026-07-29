@@ -11,8 +11,12 @@ import { z } from 'zod';
  *    `until_lap_press: true` alongside a real distance/duration, which acts as a
  *    placeholder the lap press overrides. So every step has a duration, and
  *    `untilLapPress` sits on top of it.
- * 2. There are no pace or heart-rate targets anywhere, by design. Their absence
- *    is the single biggest reduction in what the model can hallucinate.
+ * 2. The only target here is pace, and it is never model-supplied. Heart rate,
+ *    power and effort have no fields at all. What made the original no-targets
+ *    rule worth having was not the absence of the field but the model's
+ *    inability to invent a number that prescribes effort — `pace` preserves that
+ *    exactly, because nothing in parse.ts can populate it. See the note on
+ *    `paceSchema`.
  */
 
 export const STEP_TYPES = ['warmup', 'run', 'recover', 'rest', 'cooldown'] as const;
@@ -38,6 +42,29 @@ export const durationSchema = z.discriminatedUnion('kind', [
 ]);
 export type Duration = z.infer<typeof durationSchema>;
 
+/**
+ * An optional pace range, held as seconds per kilometre.
+ *
+ * Hand-entered, always. The model is not asked for a pace, `MODEL_JSON_SCHEMA`
+ * has no field for one, and `normaliseStep` cannot produce one — there is a test
+ * asserting that a pace in model output is discarded. So unlike every other value
+ * on a step, a pace cannot be a guess, and it is never `inferred`.
+ *
+ * Two ends rather than a single value because that is what Intervals.icu stores
+ * (`{start, end}` in secs/km) and what Garmin shows as an alert band. They are
+ * named for which is slower rather than min/max: a faster pace is a *smaller*
+ * number, so "minimum pace" reads backwards to most people — the same shape of
+ * trap as `m` meaning minutes. Equal ends are legal and mean a single pace.
+ *
+ * Bounds and the slower-must-be-slower rule live in validate.ts with the other
+ * range checks, so they arrive as messages the review screen can show.
+ */
+export const paceSchema = z.object({
+  slowerSecondsPerKm: z.number().int().positive(),
+  fasterSecondsPerKm: z.number().int().positive(),
+});
+export type Pace = z.infer<typeof paceSchema>;
+
 export const stepSchema = z.object({
   kind: z.literal('step'),
   type: z.enum(STEP_TYPES),
@@ -47,6 +74,11 @@ export const stepSchema = z.object({
    * serves only as the placeholder Intervals.icu requires.
    */
   untilLapPress: z.boolean().default(false),
+  /**
+   * Absent means no target, which is the default and stays the common case. It
+   * is also what keeps every payload written before this field existed valid.
+   */
+  pace: paceSchema.optional(),
   note: z.string().max(200).optional(),
   source: sourceSchema,
 });

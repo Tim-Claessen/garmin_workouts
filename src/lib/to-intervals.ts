@@ -1,4 +1,4 @@
-import type { Block, Step, Workout } from './schema';
+import type { Block, Pace, Step, Workout } from './schema';
 
 /**
  * Converts a validated workout into an Intervals.icu calendar event.
@@ -72,13 +72,59 @@ export function sanitiseCue(note: string | undefined): string {
 }
 
 /**
+ * mm:ss, with the seconds always padded. `4:5` is not a pace — Intervals.icu
+ * would read it as something other than what was typed, or not at all.
+ *
+ * Exported because the review screen shows the same value back to the athlete,
+ * and it should be formatted by the function that builds the payload rather than
+ * by a copy of it that can drift.
+ */
+export function formatClock(secondsPerKm: number): string {
+  const minutes = Math.floor(secondsPerKm / 60);
+  const seconds = secondsPerKm % 60;
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
+}
+
+/**
+ * A pace target, in the one form with a captured payload behind it.
+ *
+ * `- 2.5km 5:57-5:23/km Pace` parses to
+ * `{"pace":{"start":357,"end":323,"units":"secs/km"}}`, which fixes three things
+ * that are otherwise guesswork:
+ *
+ * 1. **Slower first.** 5:57 became `start` and 5:23 became `end`. Written the
+ *    other way round the range is inverted, and nothing between here and the
+ *    watch would say so.
+ * 2. **`/km` is always written out.** Omitting the unit makes Intervals.icu fall
+ *    back to whatever the athlete's sport settings default to — invisible state
+ *    that can differ per person and change under us. Stating it removes the
+ *    question, for the same reason distances always go out as km.
+ * 3. **The trailing `Pace` keyword is required.** Without it the value is not
+ *    read as a target at all.
+ *
+ * Equal ends collapse to a single value, which Intervals.icu accepts and which
+ * reads better than `4:00-4:00/km`.
+ */
+export function formatPace(pace: Pace): string {
+  const slower = formatClock(pace.slowerSecondsPerKm);
+  const faster = formatClock(pace.fasterSecondsPerKm);
+  const range = slower === faster ? slower : `${slower}-${faster}`;
+  return `${range}/km Pace`;
+}
+
+/**
  * The FIT step-intensity Garmin uses to label a step on the watch face.
  *
- * This is **not** an effort target and does not breach the no-targets rule: it
- * carries no pace, heart rate, power or percentage, and prescribes nothing. It is
- * the same classification `step.type` already holds, written in the one vocabulary
- * Garmin reads. The FIT field accepts `active`, `rest`, `warmup`, `cooldown`,
- * `recovery`, `interval` and `other`.
+ * This is **not** an effort target: it carries no heart rate, power or
+ * percentage, and prescribes nothing. It is the same classification `step.type`
+ * already holds, written in the one vocabulary Garmin reads. The FIT field
+ * accepts `active`, `rest`, `warmup`, `cooldown`, `recovery`, `interval` and
+ * `other`.
+ *
+ * It is also not the pace target, which is a separate attribute earlier on the
+ * line. The two coexist on one step and neither implies the other — a recovery
+ * can carry a pace band, and usually a step with a pace has no intensity at all
+ * because `run` is Garmin's default.
  *
  * Only recover and rest are listed. Warm-up and cool-down already arrive correctly
  * through their section headers — that route is captured from a real synced
@@ -105,12 +151,15 @@ export function formatStep(step: Step): string {
   // acts as a placeholder the lap press overrides.
   const lap = step.untilLapPress ? 'Press lap ' : '';
   const cue = sanitiseCue(step.note);
-  // Trailing, after the duration. Anything before the first duration is read as
-  // the step's cue text, so this has to sit at the end or it becomes a label
-  // reading "intensity=rest" on the watch instead of setting the step type.
+  // Both of these go *after* the duration, and for the same reason: anything
+  // before the first duration is read as the step's cue text. Placed earlier, a
+  // pace becomes the literal words "4:15-3:55/km Pace" on the watch face and
+  // prescribes nothing, exactly as an early `intensity=` becomes the label
+  // "intensity=rest" instead of setting the step type.
+  const pace = step.pace ? formatPace(step.pace) : '';
   const intensity = STEP_INTENSITY[step.type];
 
-  return `- ${lap}${cue ? `${cue} ` : ''}${duration}${intensity ? ` intensity=${intensity}` : ''}`;
+  return `- ${lap}${cue ? `${cue} ` : ''}${duration}${pace ? ` ${pace}` : ''}${intensity ? ` intensity=${intensity}` : ''}`;
 }
 
 /**

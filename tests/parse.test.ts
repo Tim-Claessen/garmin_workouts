@@ -27,6 +27,48 @@ function firstStep(blocks: ReturnType<typeof normaliseModelOutput>): Step {
   return block.kind === 'step' ? block : block.steps[0]!;
 }
 
+/**
+ * The rule that makes a pace target safe to have at all.
+ *
+ * Heart rate, power and effort have no field anywhere. Pace has one, and it is
+ * reachable only from the edit sheet: MODEL_JSON_SCHEMA does not mention it, the
+ * system prompt forbids inventing one, and normaliseStep builds its steps field
+ * by field rather than spreading the model's object. So a pace cannot arrive as
+ * a guess, which is why the review screen never asks anyone to confirm one.
+ *
+ * That property holds because of how normaliseStep is written, and it would be
+ * undone by a single spread. This is the test that would notice.
+ */
+describe('normaliseModelOutput — the model cannot supply a pace', () => {
+  it('discards a pace the model invented', () => {
+    const result = normaliseModelOutput({
+      name: 'Session',
+      blocks: [
+        {
+          reps: 1,
+          steps: [step({ pace: { slowerSecondsPerKm: 255, fasterSecondsPerKm: 235 } })],
+        },
+      ],
+    });
+    expect(firstStep(result).pace).toBeUndefined();
+  });
+
+  it('discards a pace however the model spells it', () => {
+    for (const invented of [
+      { paceTarget: '4:15-3:55/km' },
+      { targetPace: 255 },
+      { pace: '4:15/km' },
+      { minPace: 255, maxPace: 235 },
+    ]) {
+      const result = normaliseModelOutput({
+        name: 'Session',
+        blocks: [{ reps: 1, steps: [step(invented)] }],
+      });
+      expect(firstStep(result).pace).toBeUndefined();
+    }
+  });
+});
+
 describe('normaliseModelOutput — what counts as inferred', () => {
   it('takes the model at its word when it read a value from the text', () => {
     const result = normaliseModelOutput({

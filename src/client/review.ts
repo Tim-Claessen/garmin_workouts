@@ -1,5 +1,5 @@
-import type { Block, Step, Workout } from '../lib/schema';
-import { sanitiseCueInput, toDescription } from '../lib/to-intervals';
+import type { Block, Pace, Step, Workout } from '../lib/schema';
+import { formatClock, sanitiseCueInput, toDescription } from '../lib/to-intervals';
 import { toPlainEnglish } from '../lib/to-plain-english';
 import { MAX_REPS, validateWorkout, type ValidationError } from '../lib/validate';
 
@@ -153,6 +153,36 @@ function formatValue(step: Step): string {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
+/**
+ * The pace shown on the row: slower end first, matching the sheet and the
+ * payload, and formatted by the same function that writes the payload so the
+ * two cannot drift. An en dash rather than the payload's hyphen — this is a
+ * label being read, not a value being parsed.
+ */
+function formatPaceValue(pace: Pace): string {
+  const slower = formatClock(pace.slowerSecondsPerKm);
+  const faster = formatClock(pace.fasterSecondsPerKm);
+  return slower === faster ? `${slower}/km` : `${slower}–${faster}/km`;
+}
+
+/**
+ * Spoken as words rather than as a clock. A screen reader reads "4:15" as "four
+ * fifteen", which is a time of day, not a pace.
+ */
+function spokenPace(pace: Pace | undefined): string | null {
+  if (!pace) return null;
+  const say = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return s === 0
+      ? `${m} minutes per kilometre`
+      : `${m} minutes ${s} seconds per kilometre`;
+  };
+  return pace.slowerSecondsPerKm === pace.fasterSecondsPerKm
+    ? `at ${say(pace.slowerSecondsPerKm)}`
+    : `between ${say(pace.slowerSecondsPerKm)} and ${say(pace.fasterSecondsPerKm)}`;
+}
+
 /** The same amount, spelled out, for the row's screen-reader label. */
 function spokenValue(step: Step): string {
   if (step.untilLapPress) return 'until you press lap';
@@ -276,6 +306,21 @@ interface SheetState {
   unit: string;
   cue: string;
   /**
+   * The pace draft, held as four numbers rather than as a `Pace` because that is
+   * what the four boxes contain — including while half-typed, when the range is
+   * inverted or a field is momentarily empty. It becomes a `Pace` on save.
+   *
+   * Named for which end is slower, not min/max: a faster pace is a *smaller*
+   * number, so "minimum pace" reads backwards to most people. That is the same
+   * shape of trap as `m` meaning minutes, and it is worth spending two words to
+   * avoid.
+   */
+  paceOn: boolean;
+  slowMin: number;
+  slowSec: number;
+  fastMin: number;
+  fastSec: number;
+  /**
    * Added by the Add button and not yet saved. Cancel discards it, so pressing
    * Add and changing your mind leaves the workout as it was rather than stranding
    * a placeholder step nobody asked for.
@@ -294,12 +339,33 @@ interface SheetState {
 
 let sheet: SheetState | null = null;
 
+/**
+ * The pace the four boxes currently describe, or undefined when the target is
+ * off. Total seconds, so an entry like 3 minutes 75 seconds still means
+ * something sane rather than being rejected mid-typing.
+ */
+function sheetPace(state: SheetState): Pace | undefined {
+  if (!state.paceOn) return undefined;
+  return {
+    slowerSecondsPerKm: Math.round(state.slowMin * 60 + state.slowSec),
+    fasterSecondsPerKm: Math.round(state.fastMin * 60 + state.fastSec),
+  };
+}
+
 function paintSheet(): void {
   if (!sheet) return;
   el<HTMLSelectElement>('sheet-type').value = sheet.type;
   el<HTMLInputElement>('sheet-value').value = String(sheet.value);
   el<HTMLSelectElement>('sheet-unit').value = sheet.unit;
   el<HTMLInputElement>('sheet-cue').value = sheet.cue;
+
+  el('sheet-pace-off').setAttribute('aria-pressed', String(!sheet.paceOn));
+  el('sheet-pace-on').setAttribute('aria-pressed', String(sheet.paceOn));
+  el('sheet-pace-fields').classList.toggle('hidden', !sheet.paceOn);
+  el<HTMLInputElement>('sheet-pace-slow-min').value = String(sheet.slowMin);
+  el<HTMLInputElement>('sheet-pace-slow-sec').value = String(sheet.slowSec);
+  el<HTMLInputElement>('sheet-pace-fast-min').value = String(sheet.fastMin);
+  el<HTMLInputElement>('sheet-pace-fast-sec').value = String(sheet.fastSec);
 
   el('sheet-ends-set').setAttribute('aria-pressed', String(!sheet.untilLapPress));
   el('sheet-ends-lap').setAttribute('aria-pressed', String(sheet.untilLapPress));
@@ -322,6 +388,11 @@ function openSheet(
   isNew = false,
 ): void {
   const { value, unit } = editableValue(step);
+  // Off unless the step already has one. The boxes are seeded with a plausible
+  // pair so switching the target on does not start from 0:00, but nothing is
+  // written to the step until Save.
+  const pace = step.pace ?? { slowerSecondsPerKm: 300, fasterSecondsPerKm: 270 };
+
   sheet = {
     step,
     blockIndex,
@@ -332,6 +403,11 @@ function openSheet(
     value,
     unit,
     cue: step.note ?? '',
+    paceOn: step.pace !== undefined,
+    slowMin: Math.floor(pace.slowerSecondsPerKm / 60),
+    slowSec: pace.slowerSecondsPerKm % 60,
+    fastMin: Math.floor(pace.fasterSecondsPerKm / 60),
+    fastSec: pace.fasterSecondsPerKm % 60,
     isNew,
     openerSelector,
   };
@@ -396,6 +472,12 @@ function saveSheet(): void {
   if (!sheet.untilLapPress) {
     applyValue(step, Number(el<HTMLInputElement>('sheet-value').value), sheet.unit);
   }
+
+  // Read from sheet state, not from the DOM: the four boxes are mirrored into it
+  // on every input, which is what makes a repaint safe.
+  const pace = sheetPace(sheet);
+  if (pace) step.pace = pace;
+  else delete step.pace;
 
   // Already sanitised on every keystroke; trimmed here because a trailing space
   // is allowed while typing and meaningless once committed.
@@ -484,6 +566,7 @@ function renderStep(
       `Step ${number} of ${total}`,
       STEP_LABEL[step.type].toLowerCase(),
       spokenValue(step),
+      spokenPace(step.pace),
       unacknowledged ? 'guessed' : null,
     ]
       .filter(Boolean)
@@ -506,6 +589,17 @@ function renderStep(
   label.className = 'step__label';
   label.textContent = STEP_LABEL[step.type];
   main.append(label);
+
+  // On the row rather than only in the sheet, so a target is visible in the same
+  // single pass the rest of the table is read in. Never styled as an inferred
+  // value: a pace can only have been typed by hand, so there is nothing to
+  // confirm and --infer would be a lie about where it came from.
+  if (step.pace) {
+    const pace = document.createElement('span');
+    pace.className = 'step__pace';
+    pace.textContent = formatPaceValue(step.pace);
+    main.append(pace);
+  }
 
   // The athlete's own wording, which is what shows on the watch mid-run.
   if (step.note) {
@@ -947,7 +1041,11 @@ async function send(): Promise<void> {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ workout, date, athlete: currentAthleteId() }),
     });
-    const payload = (await response.json()) as { error?: string; athlete?: string };
+    const payload = (await response.json()) as {
+      error?: string;
+      athlete?: string;
+      warning?: string | null;
+    };
 
     if (!response.ok) {
       failSend(payload.error ?? 'That did not send. Try again.');
@@ -970,6 +1068,12 @@ async function send(): Promise<void> {
     ]
       .filter(Boolean)
       .join(' · ');
+
+    // The send worked; this says only that the pace targets on it might not have
+    // reached the watch. Hidden on every other send, including the next one.
+    const warning = el('success-warning');
+    warning.textContent = payload.warning ?? '';
+    warning.classList.toggle('hidden', !payload.warning);
 
     sending = false;
     show('success');
@@ -1235,6 +1339,44 @@ function initSheet(): void {
     el(id).addEventListener('click', () => {
       if (!sheet) return;
       sheet.untilLapPress = lap;
+      paintSheet();
+    });
+  }
+
+  /*
+   * The pace boxes, mirrored for exactly the reason the amount is: paintSheet()
+   * rewrites all four from sheet state, and both toggles call it. Anything typed
+   * but not mirrored is discarded by the next repaint, which here would mean
+   * saving a pace the athlete had already corrected.
+   *
+   * Each field keeps its last usable value while half-typed. Clearing a box to
+   * retype it briefly reads as empty, and treating that as zero would let a
+   * cleared minutes field save as 0:15 per km.
+   */
+  const paceFields: [string, keyof Pick<SheetState, 'slowMin' | 'slowSec' | 'fastMin' | 'fastSec'>, number][] = [
+    ['sheet-pace-slow-min', 'slowMin', 59],
+    ['sheet-pace-slow-sec', 'slowSec', 59],
+    ['sheet-pace-fast-min', 'fastMin', 59],
+    ['sheet-pace-fast-sec', 'fastSec', 59],
+  ];
+
+  for (const [id, key, max] of paceFields) {
+    const input = el<HTMLInputElement>(id);
+    input.addEventListener('input', () => {
+      const next = Number(input.value);
+      if (!sheet || input.value.trim() === '' || !Number.isFinite(next)) return;
+      if (next < 0 || next > max) return;
+      sheet[key] = Math.floor(next);
+    });
+  }
+
+  for (const [id, on] of [
+    ['sheet-pace-off', false],
+    ['sheet-pace-on', true],
+  ] as [string, boolean][]) {
+    el(id).addEventListener('click', () => {
+      if (!sheet) return;
+      sheet.paceOn = on;
       paintSheet();
     });
   }

@@ -148,6 +148,105 @@ that step as recovery rather than work. Delete the check-quote below when done.
 > Sources: [Workout Builder — Garmin — Recovery/Rest Interval step](https://forum.intervals.icu/t/workout-builder-garmin-recovery-rest-interval-step/19540),
 > [Different syntax on workout builder](https://forum.intervals.icu/t/different-syntax-on-workout-builder/125491)
 
+## Pace targets
+
+The one target this app sends. Captured from a real send against Tim's account on
+2026-07-29, using the exact string `to-intervals.ts` emits:
+
+```
+Main set 6x
+- 0.8km 4:15-3:55/km Pace
+- 90s intensity=recovery
+
+→ { "distance": 800, "duration": 196,
+    "pace": { "start": 255, "end": 235, "units": "secs/km" } }
+  { "duration": 90, "pace": null, "intensity": "recovery" }
+```
+
+4:15 is 255 seconds and became `start`; 3:55 is 235 and became `end`. The
+recovery beside it carries `pace: null`, so a target on one step in a set does
+not leak onto its neighbour.
+
+Four things that decision follows from:
+
+1. **The slower end is written first.** Intervals.icu takes the two in written
+   order and does not sort them, so a swapped pair produces an inverted band with
+   no complaint from anything downstream. `validate.ts` has the only check.
+2. **The target goes after the duration.** Same rule as `intensity=`: anything
+   before the first duration is read as the step's cue, so a pace placed there
+   arrives on the watch as the literal words `4:15-3:55/km Pace`.
+3. **Always write the unit.** Omitting `/km` makes Intervals.icu fall back to the
+   athlete's sport-settings default, which can differ per person. The other
+   accepted units are `/mi`, `/100m`, `/100y`, `/400m`, `/250m` and `/500m`.
+4. **The trailing `Pace` keyword is required**, or the value is not read as a
+   target.
+
+Absolute paces are preferred over `%`-of-threshold and zone forms (`78-82% Pace`,
+`Z2 Pace`), which exist but are the ones reported as unreliable on export.
+
+### ⚠ Threshold pace is a prerequisite, and its absence fails silently
+
+**Intervals.icu drops pace targets from the Garmin export when the athlete has no
+run threshold pace set.** The workout still syncs. The targets are simply not on
+it, and nothing anywhere says so — the reporter above saw correct `pace` values
+in `workout_doc` and "No Target" on the watch. Setting a threshold and recreating
+the workout fixed it.
+
+`sport-settings.ts` therefore writes a default of 5:00/km before sending any
+workout that carries a pace, and **only when the field is empty** — a real value
+is never touched, because overwriting one rewrites the athlete's pace zones and
+shifts their load history.
+
+Both calls confirmed against Tim's account on 2026-07-29:
+
+```
+GET  /api/v1/athlete/{id}/sport-settings           → array of groups
+PUT  /api/v1/athlete/{id}/sport-settings/{groupId} → {"threshold_pace": 3.3333333}
+```
+
+The Run group is the one whose `types` contains `"Run"` — on that account
+`["Run", "VirtualRun", "TrailRun"]`, id `2699161`. `threshold_pace` is a speed in
+**metres per second**, so 5:00/km is `1000/300`. **Unset reads as `null`**, not
+`0` and not an absent key; `sport-settings.ts` accepts all three as unset anyway.
+
+The same group carries `pace_zones`, `pace_zone_names` and `pace_load_type`,
+which is why the write only ever fills an empty field — a threshold is the anchor
+those are derived from.
+
+### Threshold gates the export, it does not scale it — confirmed
+
+The open question was whether a placeholder threshold would put *wrong* paces on
+the watch: if the Garmin export expressed targets relative to threshold, an
+arbitrary 5:00/km would scale everything silently.
+
+**It does not.** Confirmed on 2026-07-29 by sending `0.8km 4:15-3:55/km Pace`
+with the threshold set to the 5:00/km placeholder and reading the watch: the reps
+showed **4:15–3:55/km**, the values as typed. Threshold acts as a gate on whether
+the targets are exported at all, not as a multiplier on them.
+
+Two other observations consistent with that: the stored `pace` is absolute
+(`secs/km`, not a percentage), and the server's own duration estimate for the
+step — 196 s for 800 m — is 4:05/km, the midpoint of the *target*, not anything
+derived from the threshold.
+
+So the placeholder is safe, and `DEFAULT_THRESHOLD_SECONDS_PER_KM` does not need
+to be a real per-athlete figure. It still only ever fills an empty field, because
+the value drives the athlete's pace zones and load figures inside Intervals.icu
+even though nothing downstream of it reads the number.
+
+### Other known limits
+
+- **One target type per workout.** HR and pace together do not sync; steps arrive
+  as "No targets". Only pace is emitted here, so this does not bite, but it rules
+  out ever adding a second target type alongside it.
+- Garmin Connect's phone UI has been reported not to display a pace range that
+  did reach the watch. Check the device, not the app.
+
+> Sources: [Pace targets lost in Garmin export for API-created running workouts](https://forum.intervals.icu/t/pace-targets-lost-in-garmin-export-for-api-created-running-workouts-steps-arrive-on-watch-as-no-target-parsed-correctly-in-workout-doc/130706),
+> [Workout Builder Syntax Quick Guide](https://forum.intervals.icu/t/workout-builder-syntax-quick-guide/123701),
+> [Specify workouts using absolute pace](https://forum.intervals.icu/t/specify-workouts-using-absolute-pace/115846),
+> [Syncing Pace & HR targets to Garmin](https://forum.intervals.icu/t/syncing-pace-hr-targets-to-garmin/130238)
+
 ## Durations are inferred for distance steps
 
 A step written purely as distance comes back with a `duration` the server estimated from
@@ -157,9 +256,10 @@ threshold pace:
 { "distance": 800, "duration": 288 }
 ```
 
-We never asked for a pace target and none is stored — this is a derived estimate for planning
-totals only. **Do not read `duration` back as though we set it**, and do not treat its
-presence as evidence a pace target leaked in.
+This is a derived estimate for planning totals only, and it appears whether or not the step
+carries a pace target — the estimate comes from the athlete's threshold pace, not from
+anything we sent. **Do not read `duration` back as though we set it**, and in particular do
+not treat its presence on a target-less step as evidence a pace leaked in.
 
 ## Sync to the watch
 

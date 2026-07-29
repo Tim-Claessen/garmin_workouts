@@ -23,10 +23,24 @@ export const MAX_REPS = 30;
 export const MAX_TOTAL_SECONDS = 3 * 60 * 60;
 
 /**
+ * Pace bounds, in seconds per kilometre. Deliberately wide: these catch a value
+ * entered into the wrong box or off by a factor, not a pace that is merely
+ * ambitious. 2:00/km is faster than any human has run a kilometre; 20:00/km is
+ * slower than walking.
+ */
+export const MIN_PACE_SECONDS_PER_KM = 120;
+export const MAX_PACE_SECONDS_PER_KM = 1200;
+
+/**
  * Used only to bring distance into the same units as time for the total-duration
- * guard. It is never shown to the user and never sent anywhere — we hold no pace
- * data and deliberately do not ask the model for any. Six minutes per kilometre
- * is a deliberately slow assumption, so the guard errs towards catching things.
+ * guard. It is never shown to the user and never sent anywhere. Six minutes per
+ * kilometre is a deliberately slow assumption, so the guard errs towards catching
+ * things.
+ *
+ * Deliberately not replaced by a step's pace target when it has one. A target is
+ * optional and usually faster than this, so reading it here would shrink the
+ * estimate and catch less — and the guard exists to spot a distance misread as a
+ * time, which is a question about the *duration*, not about how fast it is run.
  */
 export const NOMINAL_SECONDS_PER_KM = 360;
 
@@ -36,7 +50,9 @@ export type ValidationCode =
   | 'step_distance_too_long'
   | 'step_distance_too_short'
   | 'too_many_reps'
-  | 'total_too_long';
+  | 'total_too_long'
+  | 'pace_out_of_range'
+  | 'pace_range_inverted';
 
 export interface ValidationError {
   code: ValidationCode;
@@ -59,12 +75,64 @@ function blockSeconds(block: Block): number {
     : block.reps * block.steps.reduce((total, step) => total + estimateSeconds(step), 0);
 }
 
+function clock(secondsPerKm: number): string {
+  return `${Math.floor(secondsPerKm / 60)}:${String(Math.round(secondsPerKm % 60)).padStart(2, '0')}`;
+}
+
+/**
+ * A pace target is the one value on a step that a human typed rather than the
+ * model produced, so these guard typing rather than hallucination — a digit
+ * dropped, or the two ends entered the wrong way round.
+ *
+ * The inverted check is the one that earns its place. Both ends are plausible
+ * paces on their own, so nothing else between the sheet and the watch would
+ * notice they had been swapped; Intervals.icu takes them in written order and
+ * Garmin would show the band inside out.
+ */
+function checkPace(
+  step: Step,
+  blockIndex: number,
+  stepIndex: number | null,
+): ValidationError[] {
+  const pace = step.pace;
+  if (!pace) return [];
+
+  const errors: ValidationError[] = [];
+  const ends = [pace.slowerSecondsPerKm, pace.fasterSecondsPerKm];
+
+  for (const end of ends) {
+    if (end < MIN_PACE_SECONDS_PER_KM || end > MAX_PACE_SECONDS_PER_KM) {
+      errors.push({
+        code: 'pace_out_of_range',
+        blockIndex,
+        stepIndex,
+        message: `A pace of ${clock(end)} per km is outside the ${clock(MIN_PACE_SECONDS_PER_KM)}–${clock(MAX_PACE_SECONDS_PER_KM)} range this tool will send — check the minutes and seconds.`,
+      });
+      // One complaint per step is enough to stop the send and point at the row.
+      break;
+    }
+  }
+
+  if (pace.fasterSecondsPerKm > pace.slowerSecondsPerKm) {
+    errors.push({
+      code: 'pace_range_inverted',
+      blockIndex,
+      stepIndex,
+      message: `This pace target has ${clock(pace.fasterSecondsPerKm)} as the faster end and ${clock(pace.slowerSecondsPerKm)} as the slower one, but ${clock(pace.fasterSecondsPerKm)} per km is the slower of the two — check which way round they went in.`,
+    });
+  }
+
+  return errors;
+}
+
 function checkStep(
   step: Step,
   blockIndex: number,
   stepIndex: number | null,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
+
+  errors.push(...checkPace(step, blockIndex, stepIndex));
 
   if (step.duration.kind === 'time') {
     if (step.duration.seconds > MAX_STEP_TIME_SECONDS) {

@@ -238,6 +238,15 @@ const email = Astro.locals.accessEmail;
           <div id="success-meta" class="summary__meta"></div>
         </div>
 
+        {/*
+          Shown only when the threshold pace behind a pace target could not be
+          confirmed. The workout did send, so this is not a failure — but the
+          targets may not have survived the hop to Garmin, and a session that
+          arrives looking complete with no targets on it is exactly what this
+          screen must not imply.
+        */}
+        <p id="success-warning" class="notice notice--warn hidden"></p>
+
         <button id="again" class="btn btn--quiet" type="button">Build another</button>
       </section>
     </main>
@@ -275,6 +284,51 @@ const email = Astro.locals.accessEmail;
               <label class="sr-only" for="sheet-unit">Unit</label>
               <select id="sheet-unit"></select>
             </div>
+          </div>
+
+          {/*
+            The one target this app sends, and the only value on a step that is
+            never model-supplied — the parser has no field for a pace and cannot
+            produce one, so this is always something a person typed.
+
+            "Slower than" / "Faster than" rather than min/max: a faster pace is a
+            *smaller* number, so "minimum pace" reads backwards to most people.
+            That is the m-means-minutes trap wearing a different hat, and the two
+            extra words are the cheapest fix available.
+          */}
+          <div class="field">
+            <span class="label" id="sheet-pace-label">Pace target</span>
+            <div class="toggle" role="group" aria-labelledby="sheet-pace-label">
+              <button id="sheet-pace-off" class="toggle__option" type="button">None</button>
+              <button id="sheet-pace-on" class="toggle__option" type="button">Set a range</button>
+            </div>
+          </div>
+
+          <div class="field" id="sheet-pace-fields">
+            <div class="field__pace">
+              <label class="label" for="sheet-pace-slow-min">Slower than</label>
+              <div class="field__clock">
+                <input id="sheet-pace-slow-min" type="number" min="0" max="59" step="1" aria-label="Slower than, minutes" />
+                <span aria-hidden="true">:</span>
+                <input id="sheet-pace-slow-sec" type="number" min="0" max="59" step="1" aria-label="Slower than, seconds" />
+                <span class="field__suffix">per km</span>
+              </div>
+            </div>
+
+            <div class="field__pace">
+              <label class="label" for="sheet-pace-fast-min">Faster than</label>
+              <div class="field__clock">
+                <input id="sheet-pace-fast-min" type="number" min="0" max="59" step="1" aria-label="Faster than, minutes" />
+                <span aria-hidden="true">:</span>
+                <input id="sheet-pace-fast-sec" type="number" min="0" max="59" step="1" aria-label="Faster than, seconds" />
+                <span class="field__suffix">per km</span>
+              </div>
+            </div>
+
+            <p class="notice">
+              The watch alerts when you drift outside this band. Leave it off and
+              the step arrives with no target, as before.
+            </p>
           </div>
 
           {/*

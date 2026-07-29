@@ -6,9 +6,35 @@ from the live API that cannot be derived from first principles.
 
 ## Rules that do not bend
 
-- **No pace, heart-rate, power or effort targets. Ever.** There are no fields for
-  them and none should be added. Their absence is the single biggest reduction in
-  what the model can get wrong.
+- **No heart-rate, power or effort targets. Ever.** There are no fields for them
+  and none should be added. Intervals.icu also cannot sync two target types to
+  Garmin at once, so adding one would break pace as well as itself.
+- **Pace is the one target, and the model can never supply it.** It is optional,
+  per step, km-only, and reachable solely from the edit sheet.
+  `MODEL_JSON_SCHEMA` has no field for it, the system prompt forbids inventing
+  one, and `normaliseStep` builds its steps field by field rather than spreading
+  the model's object — there is a test in `parse.test.ts` asserting a pace in
+  model output is discarded, and a single spread would undo it.
+
+  This rule replaced a blanket "no pace targets, ever". The value in that rule
+  was never the missing field; it was that a language model could not invent
+  something prescriptive and have it reach a watch. Hand-entered-only keeps that
+  property exactly, which is why a pace is never `inferred` and never wears
+  `--infer`: there is nothing to confirm about a number the athlete typed.
+- **A pace range is written slower-end-first, and `validate.ts` is the only thing
+  that checks it.** Intervals.icu takes the two ends in written order and does
+  not sort them, so a swapped pair syncs an inverted band to the watch without a
+  murmur from anything in between. The sheet labels them "Slower than" and
+  "Faster than" for the same reason — a faster pace is a *smaller* number, so
+  min/max reads backwards, which is the m-means-minutes trap in a new costume.
+- **Sending a pace target writes a threshold pace when the athlete has none.**
+  Intervals.icu silently drops pace from the Garmin export without one, and the
+  workout still arrives — looking complete, with no targets on it. Threshold
+  gates that export rather than scaling it, verified on a watch, so the 5:00/km
+  placeholder is safe and does not need to be a real figure. The write still only
+  ever fills an empty field: the value drives the athlete's pace zones and load
+  history inside Intervals.icu, so overwriting a real one is destructive for no
+  gain.
 - **Distances emit as `km`, never a bare number followed by `m`.** In
   Intervals.icu syntax `m` means minutes. This is confined to
   [src/lib/to-intervals.ts](src/lib/to-intervals.ts) so the failure is

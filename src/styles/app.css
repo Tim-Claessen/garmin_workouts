@@ -371,6 +371,23 @@ h2 {
   font-weight: 500;
 }
 
+/*
+ * The pace target on the row. Set in --font-data with tabular figures, because
+ * it is a clock value read against the ones above and below it.
+ *
+ * Deliberately not --infer, and this is not a styling preference. --infer means
+ * "the model supplied this and nobody has confirmed it yet"; a pace can only
+ * have been typed by hand, so amber here would claim a provenance the value does
+ * not have and put a confirmation prompt on something with nothing to confirm.
+ */
+.step__pace {
+  color: var(--muted);
+  font-family: var(--font-data);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* The athlete's own wording, carried through to the watch. Never digits. */
 .step__cue {
   color: var(--muted);
@@ -689,6 +706,33 @@ h2 {
 }
 
 /*
+ * A pace is two clock values, so it gets two labelled rows rather than one row
+ * of four boxes. Which number is which is the whole difficulty of this control,
+ * and a label per line is what makes it readable at a glance.
+ */
+.field__pace + .field__pace {
+  margin-top: var(--space-2);
+}
+
+.field__clock {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.field__clock input {
+  width: 4rem;
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.field__suffix {
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/*
  * A two-option segmented control rather than a button whose label flips.
  * Showing both states side by side, with the current one marked, makes it read
  * as a choice instead of an action.
@@ -801,6 +845,27 @@ h2 {
 .summary__meta {
   color: var(--muted);
   font-size: var(--text-sm);
+}
+
+/*
+ * A caveat on an otherwise successful send: the workout is on the calendar, but
+ * its pace targets may not have survived the export to Garmin.
+ *
+ * Amber would be the instinctive colour and is not available. --infer means one
+ * specific thing — "the model guessed this and nobody has confirmed it" — and
+ * spending it anywhere else blunts it everywhere it matters. Danger is the
+ * honest reading in any case: something the athlete asked for may be missing
+ * from the session, and only they can check.
+ */
+.notice--warn {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--danger-edge);
+  border-radius: var(--radius-sm);
+  background: var(--danger-wash);
+  color: var(--text);
+  font-size: var(--text-sm);
+  text-align: left;
 }
 
 /*

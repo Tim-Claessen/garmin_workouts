@@ -1,4 +1,19 @@
-import type { Repeat, Step, StepType, Workout } from '../src/lib/schema';
+import type { Pace, Repeat, Step, StepType, Workout } from '../src/lib/schema';
+
+/**
+ * A pace range written the way it is read: `pace('4:15', '3:55')` is the slower
+ * end first, matching the step line, the sheet and the stored payload.
+ */
+export function pace(slower: string, faster: string): Pace {
+  const seconds = (clock: string) => {
+    const [minutes, secs] = clock.split(':').map(Number);
+    return minutes! * 60 + secs!;
+  };
+  return {
+    slowerSecondsPerKm: seconds(slower),
+    fasterSecondsPerKm: seconds(faster),
+  };
+}
 
 export function timeStep(
   type: StepType,

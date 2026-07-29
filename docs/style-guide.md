@@ -65,7 +65,7 @@ encodes trust, not hierarchy.**
 | `--faint` | `#5D6874` | Placeholder text and disabled button labels only |
 | `--accent` | `#0BB5DD` | Confirmed structure, primary action, work steps |
 | `--infer` | `#F0A83C` | **Reserved exclusively for AI-inferred values awaiting confirmation** |
-| `--danger` | `#E8555C` | Validation failures and deletion only |
+| `--danger` | `#E8555C` | Validation failures, deletion, and a send that may not have carried what was asked |
 
 `--infer` appears nowhere else. Not on hover, not on focus, not as an accent. Its
 only job is to mean "the model made this up and you haven't agreed to it yet."
@@ -76,6 +76,18 @@ whole design is built around.
 Confirming is a **primary-weight amber button** — the one thing the review screen
 exists to make happen should look like the thing to do. It is still one value at
 a time. There is no confirm-all and there never will be.
+
+A **pace target is never amber**, and this is the rule working rather than an
+exception to it. A pace can only have been typed by hand — the model has no field
+for one — so amber would claim a provenance the value does not have and put a
+confirmation prompt on something with nothing to confirm. It sits in `--muted`,
+in the data face, like the amount beside it.
+
+The third use of `--danger` is the caveat on an otherwise successful send: the
+workout reached the calendar but its pace targets may not have reached the watch.
+Amber is the instinctive colour there and is not available, and danger is the
+honest reading anyway — something the athlete asked for may be missing from the
+session, and only they can check.
 
 ## Type
 
