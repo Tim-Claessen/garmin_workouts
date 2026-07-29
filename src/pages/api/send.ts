@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
 import { resolveAthlete } from '../../lib/roster';
 import { workoutSchema } from '../../lib/schema';
+import { ensureRunThresholdPace, hasPaceTarget } from '../../lib/sport-settings';
 import { toDescription, toIntervalsEvent } from '../../lib/to-intervals';
 import { validateWorkout } from '../../lib/validate';
 
@@ -45,6 +46,24 @@ export const POST: APIRoute = async ({ request }) => {
   );
   if (!resolved.ok) return json({ error: resolved.error }, resolved.status);
   const { athleteId, apiKey, label } = resolved.athlete;
+
+  // A pace target that reaches Intervals.icu but not the watch is worse than no
+  // target: the workout arrives looking complete. Intervals.icu drops pace from
+  // the Garmin export when the athlete has no run threshold pace, so one gets
+  // written if the field is empty. A real value is never touched, and a workout
+  // without a pace target never gets here at all.
+  //
+  // A failure does not stop the send. The workout still belongs on the calendar,
+  // and what is at risk is only whether the targets survive the export — so this
+  // is reported rather than raised, and the success card says so plainly instead
+  // of implying all is well.
+  let thresholdWarning: string | null = null;
+  if (hasPaceTarget(parsed.data)) {
+    const threshold = await ensureRunThresholdPace({ athleteId, apiKey });
+    if (!threshold.ok) {
+      thresholdWarning = `The workout was sent, but its pace targets may not reach the watch. ${label} has no run threshold pace on Intervals.icu, and setting one failed — ${threshold.reason} Check the session on the watch before running it.`;
+    }
+  }
 
   const event = toIntervalsEvent(parsed.data, date);
 
@@ -93,5 +112,9 @@ export const POST: APIRoute = async ({ request }) => {
     // wrong calendar should be obvious immediately, not discovered on a run.
     athlete: label,
     description: event.description,
+    // Null unless the threshold could not be confirmed. The success card shows
+    // it, because a silently target-less workout is the failure this whole path
+    // exists to avoid.
+    warning: thresholdWarning,
   });
 };

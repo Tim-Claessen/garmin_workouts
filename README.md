@@ -27,12 +27,13 @@ review screen ──► every inferred value acknowledged by hand
 
 | Module | Job |
 | --- | --- |
-| [src/lib/schema.ts](src/lib/schema.ts) | The workout shape. No pace or HR targets, ever |
+| [src/lib/schema.ts](src/lib/schema.ts) | The workout shape. Pace is the only target, and never model-supplied |
 | [src/lib/validate.ts](src/lib/validate.ts) | Hard range checks that run before display and again before send |
 | [src/lib/parse.ts](src/lib/parse.ts) | Prompt, model-facing schema, normalisation. Takes an injected AI runner |
 | [src/lib/ai.ts](src/lib/ai.ts) | The only file that touches the AI binding |
 | [src/lib/to-intervals.ts](src/lib/to-intervals.ts) | Emits the Intervals.icu description **string** |
 | [src/lib/to-plain-english.ts](src/lib/to-plain-english.ts) | The restatement. Never model-generated |
+| [src/lib/sport-settings.ts](src/lib/sport-settings.ts) | Makes sure a pace target survives the hop to Garmin |
 | [src/lib/intervals-admin.ts](src/lib/intervals-admin.ts) | Bulk removal of planned workouts |
 | [src/client/review.ts](src/client/review.ts) | The review screen |
 
@@ -89,6 +90,46 @@ So the parser lifts a short label from the athlete's own wording ("threshold",
 "jog back", "easy") into `note`, and the emitter puts it in front of the
 duration. `sanitiseCue()` strips **every digit** before it goes anywhere near the
 description — a number in a cue is the 26-hour failure by another route.
+
+## Pace targets
+
+A step can optionally carry a pace range, which reaches the watch as an alert
+band. It is set by hand on the review screen and **the model is never asked for
+one**: `MODEL_JSON_SCHEMA` has no field for it and `normaliseStep` cannot produce
+one, so a pace is the single value on a step that cannot be a guess. That is why
+it is never amber and never needs confirming.
+
+Heart rate, power and effort targets do not exist and should not be added.
+Besides the original reason — every target is a number the model could invent —
+Intervals.icu cannot sync two target types to Garmin at once, so adding a second
+would break pace as well as itself.
+
+The sheet asks for **"slower than"** and **"faster than"** rather than min and
+max. A faster pace is a *smaller* number, so "minimum pace" reads backwards to
+most people, and getting it backwards is silent: Intervals.icu takes the two ends
+in written order without sorting them, and the watch would show the band inside
+out. [validate.ts](src/lib/validate.ts) holds the only check that catches it.
+
+```
+- 0.8km 4:15-3:55/km Pace
+→ { "distance": 800, "pace": { "start": 255, "end": 235, "units": "secs/km" } }
+```
+
+### Threshold pace is set for you
+
+Intervals.icu **drops pace targets from the Garmin export when the athlete has no
+run threshold pace set** — the workout still syncs, it just arrives with no
+targets and nothing says so. So sending a workout that carries a pace writes a
+threshold of 5:00/km when the field is empty.
+
+It only ever fills an empty field. A real threshold is left alone, because the
+value drives that athlete's pace zones and load history inside Intervals.icu.
+
+The placeholder is safe because threshold *gates* the export rather than scaling
+it — verified on a watch, see
+[docs/intervals-syntax.md](docs/intervals-syntax.md). If the write fails, the
+workout is still sent and the success screen says the targets may not have
+arrived, rather than implying all is well.
 
 ## Athletes
 
@@ -150,6 +191,10 @@ and someone else's training plan.
 Workouts are pushed roughly **one week ahead** of the current date. Anything
 further out sits on the Intervals calendar until it comes into range. That is not
 a bug.
+
+There is no threshold-pace step here. If the athlete has none set, Sessionise
+writes one the first time it sends them a workout carrying a pace target — see
+[Pace targets](#pace-targets).
 
 ### Cloudflare
 
@@ -320,7 +365,15 @@ captured payloads.
 - [ ] No accessibility pass with a real screen reader. The redesign added focus
       rings, 44px targets, a live region on the confirmation banner, per-row
       `aria-label`s and focus management in the editing sheet, but none of it has
-      been driven by anything other than a keyboard.
+      been driven by anything other than a keyboard. The pace boxes are the
+      newest thing untested this way — `spokenPace()` spells the values out as
+      words because a reader says "4:15" as a time of day, but that has not been
+      heard.
+- [ ] **`src/client/review.ts` has no tests at all**, and the pace sheet added
+      four more mirrored fields to it. The mirroring rule — anything
+      `paintSheet()` rewrites must be written back into sheet state on input — is
+      currently enforced by comments and care. A jsdom environment for the client
+      alone would cover it.
 
 ### If it gets more use
 

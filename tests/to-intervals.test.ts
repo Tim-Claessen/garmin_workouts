@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CUE_MAX_LENGTH,
   formatDistance,
+  formatPace,
   formatStep,
   formatTime,
   sanitiseCue,
@@ -12,6 +13,7 @@ import {
 import {
   distanceStep,
   lapPressStep,
+  pace,
   referenceWorkout,
   repeat,
   timeStep,
@@ -153,6 +155,80 @@ describe('step intensity', () => {
   });
 });
 
+/**
+ * The one target this app sends, and the only value on a step that cannot have
+ * come from the model. The captured payload behind these assertions is in
+ * docs/intervals-syntax.md:
+ *
+ *   - 2.5km 5:57-5:23/km Pace
+ *   → {"pace":{"start":357,"end":323,"units":"secs/km"}}
+ */
+describe('pace targets', () => {
+  it('writes the slower end first, as the captured payload does', () => {
+    // 5:57 became `start` and 5:23 became `end`. Written the other way round the
+    // band is inverted on the watch and nothing in between would say so.
+    expect(formatPace(pace('5:57', '5:23'))).toBe('5:57-5:23/km Pace');
+    expect(formatPace(pace('4:15', '3:55'))).toBe('4:15-3:55/km Pace');
+  });
+
+  it('pads seconds to two digits', () => {
+    // 4:5 is not a pace. Intervals.icu would read the value differently or not
+    // at all, and either way the target is not what was typed.
+    expect(formatPace(pace('4:05', '3:09'))).toBe('4:05-3:09/km Pace');
+    expect(formatPace(pace('4:00', '3:00'))).toBe('4:00-3:00/km Pace');
+  });
+
+  it('collapses equal ends to a single value', () => {
+    expect(formatPace(pace('4:00', '4:00'))).toBe('4:00/km Pace');
+  });
+
+  it('always states the unit and the Pace keyword', () => {
+    // Omitting /km falls back to the athlete's sport default — invisible state
+    // that can differ per person. Omitting `Pace` means it is not read as a
+    // target at all.
+    for (const value of [pace('6:00', '5:30'), pace('3:30', '3:30'), pace('4:15', '3:55')]) {
+      expect(formatPace(value)).toMatch(/\/km Pace$/);
+    }
+  });
+
+  it('sits after the duration and before the intensity', () => {
+    // Anything before the first duration is read as the step's cue, so a pace
+    // placed there becomes the literal words "4:15-3:55/km Pace" on the watch.
+    const step = timeStep('recover', 90, { pace: pace('6:30', '6:00') });
+    const line = formatStep(step);
+    expect(line).toBe('- 90s 6:30-6:00/km Pace intensity=recovery');
+    expect(line.indexOf('90s')).toBeLessThan(line.indexOf('6:30'));
+    expect(line.indexOf('6:30')).toBeLessThan(line.indexOf('intensity='));
+  });
+
+  it('coexists with a lap press and a cue on the same line', () => {
+    const step = distanceStep('warmup', 2000, {
+      untilLapPress: true,
+      note: 'easy jog',
+      pace: pace('6:00', '5:30'),
+    });
+    expect(formatStep(step)).toBe('- Press lap easy jog 2km 6:00-5:30/km Pace');
+  });
+
+  it('is absent from the line when the step has no target', () => {
+    expect(formatStep(distanceStep('run', 800))).toBe('- 0.8km');
+    expect(formatStep(distanceStep('run', 800))).not.toMatch(/Pace/);
+  });
+
+  it('introduces no bare metre value anywhere on the line', () => {
+    // The m/mtr trap, checked across the whole step line rather than just the
+    // duration — a pace adds digits to the line and must not reopen it.
+    const steps = [
+      distanceStep('run', 800, { pace: pace('4:15', '3:55') }),
+      timeStep('recover', 90, { pace: pace('6:30', '6:00') }),
+      distanceStep('warmup', 2000, { untilLapPress: true, pace: pace('6:00', '6:00') }),
+    ];
+    for (const step of steps) {
+      expect(formatStep(step)).not.toMatch(/\d\s*m(\s|$)/);
+    }
+  });
+});
+
 describe('step cues', () => {
   it('places the cue before the duration', () => {
     const step = distanceStep('run', 800, { note: 'threshold' });
@@ -209,6 +285,43 @@ describe('toDescription', () => {
         '- Press lap 2km',
       ].join('\n'),
     );
+  });
+
+  it('carries a pace target through the whole payload', () => {
+    // The end-to-end shape of a session with a target on the effort only, which
+    // is how interval sessions are actually prescribed. This is the string that
+    // goes over the wire; everything else about pace is a detail of producing it.
+    const w = workout(
+      [
+        lapPressStep('warmup'),
+        repeat(6, [
+          distanceStep('run', 800, { pace: pace('4:15', '3:55') }),
+          timeStep('recover', 90),
+        ]),
+        lapPressStep('cooldown'),
+      ],
+      'Tuesday intervals',
+    );
+
+    expect(toDescription(w)).toBe(
+      [
+        'Warmup',
+        '- Press lap 2km',
+        '',
+        'Main set 6x',
+        '- 0.8km 4:15-3:55/km Pace',
+        '- 90s intensity=recovery',
+        '',
+        'Cooldown',
+        '- Press lap 2km',
+      ].join('\n'),
+    );
+  });
+
+  it('leaves the payload byte-identical when no step carries a pace', () => {
+    // The feature is optional, and a session without a target must produce the
+    // exact string it produced before pace existed.
+    expect(toDescription(referenceWorkout())).not.toMatch(/Pace/);
   });
 
   it('marks lap-press steps with the literal flag text', () => {

@@ -8,9 +8,10 @@ One line per decision, with the reason. Newest at the bottom.
   roles and invitations would be more code than the app.
 - **One session at a time, no history, no database.** Used roughly weekly. State
   would be the largest part of the system and buy nothing.
-- **Time and distance targets only — no pace or heart rate.** Removes the
-  threshold-pace setup entirely and cuts out the biggest surface for the model to
-  invent something plausible and wrong.
+- **~~Time and distance targets only — no pace or heart rate.~~** *Superseded
+  2026-07-29 — see "Pace targets" below.* Removed the threshold-pace setup
+  entirely and cut out the biggest surface for the model to invent something
+  plausible and wrong.
 - **Lap-button press for warm-up and cool-down.** A native Garmin duration type,
   and it matches how the sessions are already run.
 - **Nothing reaches Garmin without an explicit confirm.** The core requirement.
@@ -129,6 +130,43 @@ One line per decision, with the reason. Newest at the bottom.
 - **Both the send confirmation and the delete confirmation name the athlete.**
   With several configured, that wording is the only thing between a mis-set
   picker and someone else's training plan.
+
+## Pace targets
+
+*Added 2026-07-29, superseding "time and distance targets only".*
+
+- **Pace is a target, heart rate and power are not.** The original rule banned all
+  four, and what made it worth having was never the missing field — it was that a
+  language model could not invent something prescriptive and have it reach a
+  watch. A hand-entered-only pace keeps that property exactly. HR and power stay
+  out both for the original reason and because Intervals.icu cannot sync two
+  target types to Garmin at once, so a second would break pace as well as itself.
+- **The model is never asked for a pace.** No field in `MODEL_JSON_SCHEMA`,
+  nothing in the prompt, and `normaliseStep` builds its steps field by field
+  rather than spreading the model's object — a test asserts a pace in model
+  output is discarded. This is what makes a pace the one value on a step that
+  needs no confirmation, and why it never wears `--infer`.
+- **Per step, not per workout.** Work and recovery reps want different targets,
+  which is how interval sessions are actually prescribed. It also cost no new
+  screen: the edit sheet already existed.
+- **"Slower than" and "faster than", not min and max.** A faster pace is a
+  smaller number, so min/max reads backwards to most people — the m-means-minutes
+  trap in a new costume. Getting it backwards is silent: Intervals.icu takes the
+  ends in written order without sorting them, so `validate.ts` holds the only
+  check between the two boxes and an inside-out band on the watch.
+- **Absolute paces, always with an explicit `/km`.** Percent-of-threshold and
+  zone forms exist and are the ones reported as unreliable on export. Omitting
+  the unit falls back to the athlete's sport-settings default, which is invisible
+  state that can differ per person.
+- **Sending a pace writes a 5:00/km threshold when the athlete has none.**
+  Without one, Intervals.icu drops the targets from the Garmin export and the
+  workout arrives looking complete. Verified that threshold *gates* the export
+  rather than scaling it, so a placeholder is safe. It only ever fills an empty
+  field — the value drives pace zones and load history inside Intervals.icu, so
+  overwriting a real one would be destructive for nothing.
+- **A failed threshold write does not block the send.** The workout still belongs
+  on the calendar; what is at risk is only whether the targets survived. So it is
+  reported on the success screen rather than raised as an error.
 
 ## Known characteristics
 
